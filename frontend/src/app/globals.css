@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-paper text-ink antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+  text-rendering: optimizeLegibility;
+}
+
+/* Evita zoom automatico do iOS em campos de formulario */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+@media (min-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 14px;
+  }
+}
+
+::selection {
+  @apply bg-brand-soft text-brand-deep;
+}
+
+/* Scrollbar discreta */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c9d2c9 transparent;
+}
+*::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-line;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@layer components {
+  /* ---------- Campos ---------- */
+  .field {
+    @apply w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink shadow-[0_1px_2px_rgba(16,25,21,0.03)] outline-none transition placeholder:text-ink/35 hover:border-ink/20 focus:border-brand focus:shadow-ring disabled:cursor-not-allowed disabled:bg-paper disabled:text-ink/50;
+  }
+
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink/70;
+  }
+
+  /* ---------- Botoes ---------- */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_1px_2px_rgba(168,0,0,0.35)] transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink shadow-[0_1px_2px_rgba(16,25,21,0.04)] transition hover:border-ink/20 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-danger px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-ink/70 transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* ---------- Superficies ---------- */
+  .panel {
+    @apply rounded-xl border border-line bg-surface shadow-soft;
+  }
+
+  .panel-title {
+    @apply text-base font-semibold tracking-tight text-ink;
+  }
+
+  .page-title {
+    @apply text-[22px] font-bold tracking-tight text-ink;
+  }
+
+  .page-subtitle {
+    @apply mt-0.5 text-sm text-ink/60;
+  }
+
+  /* ---------- Tabelas ---------- */
+  .table-base {
+    @apply w-full text-left text-sm;
+  }
+
+  .table-base thead th {
+    @apply border-b border-line py-3 pr-4 text-xs font-semibold uppercase tracking-wide text-ink/60;
+  }
+
+  .table-base tbody td {
+    @apply border-b border-line/60 py-3.5 pr-4 align-middle text-ink/90;
+  }
+
+  .table-base tbody tr {
+    @apply transition-colors hover:bg-paper/70;
+  }
+
+  .table-base tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* ---------- Listas mobile ---------- */
+  .desktop-table-wrap {
+    @apply hidden overflow-x-auto md:block;
+  }
+
+  .mobile-card-list {
+    @apply space-y-3 md:hidden;
+  }
+
+  .mobile-record {
+    @apply rounded-lg border border-line bg-surface p-3.5 shadow-[0_1px_2px_rgba(5,5,5,0.04)] transition hover:bg-paper/70;
+  }
+
+  .mobile-record-header {
+    @apply flex items-start justify-between gap-3;
+  }
+
+  .mobile-record-title {
+    @apply min-w-0 break-words text-sm font-semibold text-ink;
+  }
+
+  .mobile-record-subtitle {
+    @apply mt-1 break-words text-xs leading-5 text-ink/55;
+  }
+
+  .mobile-record-grid {
+    @apply mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-line/70 pt-3;
+  }
+
+  .mobile-record-row {
+    @apply min-w-0;
+  }
+
+  .mobile-record-label {
+    @apply text-[11px] font-semibold uppercase tracking-wide text-ink/45;
+  }
+
+  .mobile-record-value {
+    @apply mt-0.5 break-words text-sm font-semibold text-ink/85;
+  }
+
+  .mobile-action-row {
+    @apply mt-3 flex flex-col gap-2 border-t border-line/70 pt-3 sm:flex-row sm:items-center sm:justify-end;
+  }
+
+  /* ---------- Estados ---------- */
+  .empty-state {
+    @apply flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line bg-paper/60 px-6 py-10 text-center;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-ink/[0.06] before:absolute before:inset-0 before:-translate-x-full before:animate-shimmer before:bg-gradient-to-r before:from-transparent before:via-white/60 before:to-transparent;
+  }
+
+  .kpi-icon {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl;
+  }
+}
