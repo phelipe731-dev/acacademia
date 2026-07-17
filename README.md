@@ -81,7 +81,7 @@ O arquivo `render.yaml` na raiz cria:
 
 - Web Service `acacademia-api`
 - Postgres `acacademia-db`
-- Migrations Alembic antes do start
+- Migrations Alembic no start do servico
 - CORS liberado para `https://acacademia.netlify.app`
 
 Fluxo recomendado:
