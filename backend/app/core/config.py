@@ -1,7 +1,8 @@
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Ambientes tratados como "nao-producao": defaults fracos sao tolerados apenas aqui.
 NON_PRODUCTION_ENVIRONMENTS = {"local", "dev", "development", "test", "testing"}
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     # Marca o cookie como Secure fora de "local". Sobrescreva para False se rodar
     # producao sem HTTPS na frente (nao recomendado).
     auth_cookie_secure: bool | None = None
-    backend_cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    backend_cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     auto_create_admin: bool = True
     first_admin_name: str = "Administrador"
     first_admin_email: str = "admin@acacademia.com.br"
