@@ -89,13 +89,14 @@ Fluxo recomendado:
 1. No Render, escolha **New + > Blueprint**.
 2. Conecte o repo `phelipe731-dev/acacademia`.
 3. Confirme o arquivo `render.yaml`.
-4. Quando o Render pedir `FIRST_ADMIN_PASSWORD`, informe uma senha forte para o admin inicial.
-5. Aguarde o deploy e teste `/health` na URL gerada pelo Render.
-6. No Netlify, configure `NEXT_PUBLIC_API_URL` com a URL do backend, por exemplo:
+4. Aguarde o deploy e teste `/health` na URL gerada pelo Render.
+5. No Netlify, configure `NEXT_PUBLIC_API_URL` com a URL do backend, por exemplo:
 
 ```text
 https://acacademia-api.onrender.com
 ```
+
+6. Depois do redeploy do frontend, abra `/login` e use **Primeiro acesso? Criar administrador**.
 
 Observacao: no plano gratis do Render, o servico pode dormir quando fica sem acesso. O primeiro login depois de um tempo parado pode demorar alguns segundos. Uploads locais em `uploads/` tambem nao devem ser tratados como armazenamento permanente no plano gratis.
 

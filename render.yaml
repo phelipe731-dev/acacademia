@@ -24,13 +24,7 @@ services:
       - key: FRONTEND_PUBLIC_URL
         value: https://acacademia.netlify.app
       - key: AUTO_CREATE_ADMIN
-        value: "true"
-      - key: FIRST_ADMIN_NAME
-        value: Administrador
-      - key: FIRST_ADMIN_EMAIL
-        value: admin@acacademia.com.br
-      - key: FIRST_ADMIN_PASSWORD
-        sync: false
+        value: "false"
       - key: AUTH_COOKIE_SECURE
         value: "true"
 
