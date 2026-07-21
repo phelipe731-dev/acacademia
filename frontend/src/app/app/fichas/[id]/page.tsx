@@ -1,10 +1,17 @@
 "use client";
 
 import {
+  AlertCircle,
+  CalendarClock,
+  ChevronDown,
+  Clock3,
   Copy,
   Dumbbell,
+  ExternalLink,
+  ImageIcon,
   ImagePlus,
   Link2,
+  PlayCircle,
   Plus,
   Save,
   Share2,
@@ -12,7 +19,7 @@ import {
   Video
 } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, use, useEffect, useState } from "react";
+import { FormEvent, use, useEffect, useMemo, useState } from "react";
 
 import { Message } from "@/components/Message";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -35,6 +42,7 @@ const mediaLabels: Record<TrainingMediaType, string> = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const planFormId = "training-plan-form";
 
 function mediaUrl(url?: string | null) {
   if (!url) return "#";
@@ -51,6 +59,11 @@ interface MediaDraft {
   file: File | null;
 }
 
+interface ExerciseGroupSection {
+  group: string;
+  entries: TrainingPlanExercise[];
+}
+
 const emptyExercise = {
   name: "",
   muscle_group: "",
@@ -59,7 +72,7 @@ const emptyExercise = {
   load: "",
   rest: "",
   notes: "",
-  sort_order: "0"
+  sort_order: "1"
 };
 
 function emptyMedia(): MediaDraft {
@@ -71,6 +84,48 @@ function emptyMedia(): MediaDraft {
     sort_order: "0",
     file: null
   };
+}
+
+function groupExercises(exercises: TrainingPlanExercise[]): ExerciseGroupSection[] {
+  const byGroup = new Map<string, TrainingPlanExercise[]>();
+  exercises.forEach((exercise) => {
+    const group = exercise.muscle_group?.trim() || "Outros";
+    const bucket = byGroup.get(group);
+    if (bucket) {
+      bucket.push(exercise);
+    } else {
+      byGroup.set(group, [exercise]);
+    }
+  });
+  return [...byGroup.entries()].map(([group, entries]) => ({ group, entries }));
+}
+
+function parseFirstNumber(value?: string | number | null): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (!value) return null;
+  const match = String(value).match(/\d+/);
+  return match ? Number(match[0]) : null;
+}
+
+function estimateDurationMinutes(exercises: TrainingPlanExercise[]): number | null {
+  if (exercises.length === 0) return null;
+  const totalMinutes = exercises.reduce((minutes, exercise) => {
+    const sets = Math.max(parseFirstNumber(exercise.sets) ?? 3, 1);
+    const restSeconds = Math.max(parseFirstNumber(exercise.rest) ?? 60, 0);
+    const executionWindow = Math.max(sets * 2.2, 3);
+    const restWindow = (Math.max(sets - 1, 1) * restSeconds) / 60;
+    return minutes + executionWindow + restWindow;
+  }, 6);
+  return Math.max(20, Math.round(totalMinutes / 5) * 5);
+}
+
+function exerciseMeta(exercise: TrainingPlanExercise): string[] {
+  return [
+    exercise.sets ? `${exercise.sets} series` : null,
+    exercise.repetitions ? `${exercise.repetitions} reps` : null,
+    exercise.rest ? `${exercise.rest} descanso` : null,
+    exercise.load || null
+  ].filter(Boolean) as string[];
 }
 
 export default function TrainingPlanPage({ params }: { params: Promise<{ id: string }> }) {
@@ -105,6 +160,45 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    if (!plan) return;
+    setExerciseForm((current) => {
+      const untouched =
+        !current.name &&
+        !current.muscle_group &&
+        !current.sets &&
+        !current.repetitions &&
+        !current.load &&
+        !current.rest &&
+        !current.notes;
+      if (!untouched) return current;
+      return { ...current, sort_order: String(plan.exercises.length + 1) };
+    });
+  }, [plan]);
+
+  const activeExercises = useMemo(
+    () => plan?.exercises.filter((exercise) => exercise.is_active) ?? [],
+    [plan?.exercises]
+  );
+  const groupedExercises = useMemo(() => groupExercises(plan?.exercises ?? []), [plan?.exercises]);
+  const publicPreviewGroups = useMemo(() => groupExercises(activeExercises), [activeExercises]);
+  const exerciseNumberById = useMemo(
+    () =>
+      new Map(
+        (plan?.exercises ?? []).map((exercise, index) => [exercise.id, index + 1] as const)
+      ),
+    [plan?.exercises]
+  );
+  const activeMediaCount = useMemo(
+    () =>
+      activeExercises.reduce(
+        (count, exercise) => count + exercise.media.filter((media) => media.is_active).length,
+        0
+      ),
+    [activeExercises]
+  );
+  const estimatedDuration = useMemo(() => estimateDurationMinutes(activeExercises), [activeExercises]);
 
   async function savePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -152,7 +246,11 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
           is_active: true
         })
       });
-      setExerciseForm(emptyExercise);
+      setExerciseForm({
+        ...emptyExercise,
+        muscle_group: exerciseForm.muscle_group,
+        sort_order: String(plan.exercises.length + 1)
+      });
       setMessage({ text: "Exercicio adicionado.", type: "success" });
       await load();
     } catch (error) {
@@ -259,7 +357,11 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
     return (
       <div className="space-y-6">
         <PageHeader title="Ficha de treino" subtitle="Carregando ficha..." />
-        <div className="panel p-5"><SkeletonRows rows={5} /></div>
+        <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)] 2xl:grid-cols-[320px_minmax(0,1fr)_340px]">
+          <div className="panel p-5"><SkeletonRows rows={6} /></div>
+          <div className="panel p-5"><SkeletonRows rows={7} height="h-20" /></div>
+          <div className="panel p-5 xl:col-span-2 2xl:col-span-1"><SkeletonRows rows={4} height="h-24" /></div>
+        </div>
       </div>
     );
   }
@@ -271,277 +373,719 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
   const whatsappMessage = `Ola, ${plan.student?.name || "aluno"}! Segue sua ficha de treino digital:\n${shareLink?.public_url || ""}\n\nQualquer duvida, fale com a equipe da academia.`;
 
   return (
-    <div className="space-y-6 animate-fade-up">
-      <PageHeader title={plan.name} subtitle={plan.student ? `Ficha de ${plan.student.name}` : "Ficha de treino"}>
+    <div className="space-y-5 animate-fade-up">
+      <PageHeader
+        title={plan.name}
+        subtitle={plan.student ? `Ficha de ${plan.student.name}` : "Ficha de treino"}
+      >
         <Link className="btn-secondary" href={`/app/alunos/${plan.student_id}`}>
           Voltar ao aluno
         </Link>
+        {canEdit ? (
+          shareLink ? (
+            <button className="btn-secondary" type="button" onClick={copyLink}>
+              <Copy className="h-4 w-4" aria-hidden />
+              Copiar link
+            </button>
+          ) : (
+            <button className="btn-secondary" type="button" onClick={generateLink} disabled={sharing}>
+              <Link2 className="h-4 w-4" aria-hidden />
+              {sharing ? "Gerando..." : "Gerar link"}
+            </button>
+          )
+        ) : null}
+        {canEdit ? (
+          <button className="btn-primary" type="submit" form={planFormId} disabled={savingPlan}>
+            <Save className="h-4 w-4" aria-hidden />
+            {savingPlan ? "Salvando..." : "Salvar ficha"}
+          </button>
+        ) : null}
       </PageHeader>
 
       {message ? <Message message={message.text} type={message.type} /> : null}
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <form onSubmit={savePlan} className="panel p-5">
-          <h2 className="panel-title">Dados da ficha</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="plan-name">Nome</label>
-              <input id="plan-name" className="field" disabled={!canEdit} value={plan.name} onChange={(event) => setPlan({ ...plan, name: event.target.value })} />
-            </div>
-            <div>
-              <label className="label" htmlFor="plan-objective">Objetivo</label>
-              <input id="plan-objective" className="field" disabled={!canEdit} value={plan.objective || ""} onChange={(event) => setPlan({ ...plan, objective: event.target.value })} />
-            </div>
-            <div>
-              <label className="label" htmlFor="plan-start">Inicio</label>
-              <input id="plan-start" className="field" disabled={!canEdit} type="date" value={plan.start_date || ""} onChange={(event) => setPlan({ ...plan, start_date: event.target.value })} />
-            </div>
-            <div>
-              <label className="label" htmlFor="plan-review">Reavaliacao</label>
-              <input id="plan-review" className="field" disabled={!canEdit} type="date" value={plan.reassessment_date || ""} onChange={(event) => setPlan({ ...plan, reassessment_date: event.target.value })} />
-            </div>
-            <div>
-              <label className="label" htmlFor="plan-status">Status</label>
-              <select id="plan-status" className="field" disabled={!canEdit} value={plan.is_active ? "ATIVO" : "INATIVO"} onChange={(event) => setPlan({ ...plan, is_active: event.target.value === "ATIVO" })}>
-                <option value="ATIVO">Ativa</option>
-                <option value="INATIVO">Inativa</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="label" htmlFor="plan-notes">Observacoes</label>
-              <textarea id="plan-notes" className="field" disabled={!canEdit} rows={3} value={plan.notes || ""} onChange={(event) => setPlan({ ...plan, notes: event.target.value })} />
-            </div>
-            {canEdit ? (
-              <button className="btn-primary md:col-span-2" type="submit" disabled={savingPlan}>
-                <Save className="h-4 w-4" aria-hidden />
-                {savingPlan ? "Salvando..." : "Salvar ficha"}
-              </button>
-            ) : null}
-          </div>
-        </form>
-
-        <aside className="panel p-5">
-          <h2 className="panel-title">Link para aluno</h2>
-          {shareLink ? (
-            <div className="mt-4 space-y-3">
-              <div className="rounded-lg border border-line bg-paper p-3 text-xs font-medium text-ink/70 break-all">
-                {shareLink.public_url}
+      <div className="grid gap-5 xl:grid-cols-[320px,minmax(0,1fr)] 2xl:grid-cols-[320px,minmax(0,1fr),340px]">
+        <aside className="space-y-5">
+          <form id={planFormId} onSubmit={savePlan} className="panel p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="panel-title">Dados da ficha</h2>
+                <p className="mt-1 text-sm text-ink/55">
+                  Ajuste objetivo, datas e orientacoes principais do treino.
+                </p>
               </div>
-              <div className="grid gap-2">
-                <button className="btn-secondary w-full" type="button" onClick={copyLink}>
-                  <Copy className="h-4 w-4" aria-hidden />
-                  Copiar link
+              <StatusBadge value={plan.is_active ? "ATIVO" : "INATIVO"} />
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="label" htmlFor="plan-name">Nome da ficha</label>
+                <input
+                  id="plan-name"
+                  className="field"
+                  disabled={!canEdit}
+                  value={plan.name}
+                  onChange={(event) => setPlan({ ...plan, name: event.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="plan-student">Aluno</label>
+                <input
+                  id="plan-student"
+                  className="field"
+                  disabled
+                  value={plan.student?.name || `Aluno #${plan.student_id}`}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="plan-objective">Objetivo</label>
+                <input
+                  id="plan-objective"
+                  className="field"
+                  disabled={!canEdit}
+                  value={plan.objective || ""}
+                  onChange={(event) => setPlan({ ...plan, objective: event.target.value })}
+                  placeholder="Hipertrofia, condicionamento, retorno..."
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="plan-start">Inicio</label>
+                  <input
+                    id="plan-start"
+                    className="field"
+                    disabled={!canEdit}
+                    type="date"
+                    value={plan.start_date || ""}
+                    onChange={(event) => setPlan({ ...plan, start_date: event.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="plan-review">Reavaliacao</label>
+                  <input
+                    id="plan-review"
+                    className="field"
+                    disabled={!canEdit}
+                    type="date"
+                    value={plan.reassessment_date || ""}
+                    onChange={(event) => setPlan({ ...plan, reassessment_date: event.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label" htmlFor="plan-status">Status</label>
+                <select
+                  id="plan-status"
+                  className="field"
+                  disabled={!canEdit}
+                  value={plan.is_active ? "ATIVO" : "INATIVO"}
+                  onChange={(event) => setPlan({ ...plan, is_active: event.target.value === "ATIVO" })}
+                >
+                  <option value="ATIVO">Ativa</option>
+                  <option value="INATIVO">Inativa</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="plan-notes">Observacoes gerais</label>
+                <textarea
+                  id="plan-notes"
+                  className="field min-h-[110px]"
+                  disabled={!canEdit}
+                  rows={4}
+                  value={plan.notes || ""}
+                  onChange={(event) => setPlan({ ...plan, notes: event.target.value })}
+                  placeholder="Orientacoes para execucao, progressao, postura e cuidados."
+                />
+              </div>
+            </div>
+          </form>
+
+          <section className="panel p-5">
+            <h2 className="panel-title">Resumo da ficha</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+              <MetricCard
+                icon={<Dumbbell className="h-4 w-4" aria-hidden />}
+                label="Exercicios ativos"
+                value={String(activeExercises.length)}
+              />
+              <MetricCard
+                icon={<Clock3 className="h-4 w-4" aria-hidden />}
+                label="Duracao estimada"
+                value={estimatedDuration ? `${estimatedDuration} min` : "-"}
+              />
+              <MetricCard
+                icon={<CalendarClock className="h-4 w-4" aria-hidden />}
+                label="Grupos na ficha"
+                value={String(publicPreviewGroups.length)}
+              />
+              <MetricCard
+                icon={<ImagePlus className="h-4 w-4" aria-hidden />}
+                label="Midias ativas"
+                value={String(activeMediaCount)}
+              />
+            </div>
+            <div className="mt-4 rounded-xl border border-warning/20 bg-warning-soft px-4 py-3 text-sm text-warning">
+              <p className="font-semibold">Atenção</p>
+              <p className="mt-1 text-warning/90">
+                Alteracoes salvas aqui refletem no link do aluno assim que o preview for atualizado.
+              </p>
+            </div>
+          </section>
+        </aside>
+
+        <div className="space-y-5">
+          {canEdit ? (
+            <section className="panel p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="panel-title">Adicionar exercicio</h2>
+                  <p className="mt-1 text-sm text-ink/55">
+                    Monte a ficha por blocos. O grupo muscular ajuda a organizar a visualizacao do aluno.
+                  </p>
+                </div>
+                <div className="rounded-full bg-paper px-3 py-1 text-xs font-semibold text-ink/55">
+                  Proxima ordem: {exerciseForm.sort_order}
+                </div>
+              </div>
+
+              <form onSubmit={createExercise} className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.3fr),minmax(0,0.9fr),110px]">
+                <div>
+                  <label className="label" htmlFor="exercise-name">Exercicio</label>
+                  <input
+                    id="exercise-name"
+                    className="field"
+                    required
+                    value={exerciseForm.name}
+                    onChange={(event) => setExerciseForm({ ...exerciseForm, name: event.target.value })}
+                    placeholder="Supino reto com barra"
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="exercise-group">Grupo muscular</label>
+                  <input
+                    id="exercise-group"
+                    className="field"
+                    value={exerciseForm.muscle_group}
+                    onChange={(event) => setExerciseForm({ ...exerciseForm, muscle_group: event.target.value })}
+                    placeholder="Peito, Costas, Pernas..."
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="exercise-order">Ordem</label>
+                  <input
+                    id="exercise-order"
+                    className="field"
+                    type="number"
+                    min="0"
+                    value={exerciseForm.sort_order}
+                    onChange={(event) => setExerciseForm({ ...exerciseForm, sort_order: event.target.value })}
+                  />
+                </div>
+                <input
+                  className="field"
+                  placeholder="Series"
+                  value={exerciseForm.sets}
+                  onChange={(event) => setExerciseForm({ ...exerciseForm, sets: event.target.value })}
+                  aria-label="Series"
+                />
+                <input
+                  className="field"
+                  placeholder="Repeticoes"
+                  value={exerciseForm.repetitions}
+                  onChange={(event) => setExerciseForm({ ...exerciseForm, repetitions: event.target.value })}
+                  aria-label="Repeticoes"
+                />
+                <input
+                  className="field"
+                  placeholder="Carga"
+                  value={exerciseForm.load}
+                  onChange={(event) => setExerciseForm({ ...exerciseForm, load: event.target.value })}
+                  aria-label="Carga"
+                />
+                <input
+                  className="field"
+                  placeholder="Descanso"
+                  value={exerciseForm.rest}
+                  onChange={(event) => setExerciseForm({ ...exerciseForm, rest: event.target.value })}
+                  aria-label="Descanso"
+                />
+                <div className="lg:col-span-2">
+                  <input
+                    className="field"
+                    placeholder="Observacao curta para a execucao"
+                    value={exerciseForm.notes}
+                    onChange={(event) => setExerciseForm({ ...exerciseForm, notes: event.target.value })}
+                    aria-label="Observacao"
+                  />
+                </div>
+                <button className="btn-primary w-full lg:col-span-3" type="submit" disabled={creatingExercise}>
+                  <Plus className="h-4 w-4" aria-hidden />
+                  {creatingExercise ? "Adicionando..." : "Adicionar exercicio"}
                 </button>
-                <a className="btn-primary w-full" href={`https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`} target="_blank" rel="noreferrer">
-                  <Share2 className="h-4 w-4" aria-hidden />
-                  Enviar pelo WhatsApp
-                </a>
+              </form>
+            </section>
+          ) : null}
+
+          <section className="space-y-4">
+            {groupedExercises.length === 0 ? (
+              <div className="panel p-6">
+                <EmptyState
+                  icon={Dumbbell}
+                  title="Nenhum exercicio cadastrado"
+                  hint={canEdit ? "Use o formulario acima para criar a primeira secao do treino." : "Os exercicios da ficha aparecerao aqui."}
+                />
+              </div>
+            ) : (
+              groupedExercises.map((section) => (
+                <section key={section.group} className="panel overflow-hidden">
+                  <header className="flex flex-col gap-3 border-b border-line bg-paper/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink/45">Grupo muscular</p>
+                      <h2 className="mt-1 text-lg font-bold tracking-tight text-ink">{section.group}</h2>
+                    </div>
+                    <div className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-ink/60">
+                      {section.entries.filter((exercise) => exercise.is_active).length} ativos de {section.entries.length}
+                    </div>
+                  </header>
+
+                  <div className="divide-y divide-line/80">
+                    {section.entries.map((exercise) => {
+                      const draft = mediaForms[exercise.id] ?? emptyMedia();
+                      const activeMedia = exercise.media.filter((media) => media.is_active);
+                      const metrics = exerciseMeta(exercise);
+                      return (
+                        <article
+                          key={exercise.id}
+                          className={`px-4 py-5 sm:px-5 ${exercise.is_active ? "bg-surface" : "bg-paper/70 opacity-80"}`}
+                        >
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-start gap-3">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-sm font-bold text-brand-dark">
+                                  {exerciseNumberById.get(exercise.id) ?? "-"}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-base font-bold tracking-tight text-ink">{exercise.name}</h3>
+                                    <StatusBadge value={exercise.is_active ? "ATIVO" : "INATIVO"} />
+                                  </div>
+                                  <p className="mt-1 text-sm text-ink/55">
+                                    {exercise.muscle_group || "Sem grupo muscular definido"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {metrics.length > 0 ? (
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                  {metrics.map((metric) => (
+                                    <ExercisePill key={`${exercise.id}-${metric}`} value={metric} />
+                                  ))}
+                                  <ExercisePill value={`Ordem ${exercise.sort_order}`} subdued />
+                                </div>
+                              ) : (
+                                <div className="mt-4">
+                                  <ExercisePill value={`Ordem ${exercise.sort_order}`} subdued />
+                                </div>
+                              )}
+
+                              {exercise.notes ? (
+                                <p className="mt-4 rounded-xl border border-line bg-paper px-3.5 py-3 text-sm leading-6 text-ink/75">
+                                  {exercise.notes}
+                                </p>
+                              ) : null}
+                            </div>
+
+                            {canEdit && exercise.is_active ? (
+                              <button
+                                className="btn-secondary w-full lg:w-auto"
+                                type="button"
+                                onClick={() => deactivateExercise(exercise)}
+                              >
+                                <Trash2 className="h-4 w-4" aria-hidden />
+                                Inativar
+                              </button>
+                            ) : null}
+                          </div>
+
+                          <details className="group mt-4 overflow-hidden rounded-xl border border-line bg-paper/70" open={activeMedia.length > 0}>
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                              <div>
+                                <p className="text-sm font-semibold text-ink">Midias e orientacoes</p>
+                                <p className="mt-0.5 text-xs text-ink/55">
+                                  {activeMedia.length === 0 ? "Sem midias ativas" : `${activeMedia.length} item(ns) ativo(s)`}
+                                </p>
+                              </div>
+                              <ChevronDown className="h-4 w-4 text-ink/50 transition group-open:rotate-180" aria-hidden />
+                            </summary>
+
+                            <div className="border-t border-line px-4 py-4">
+                              {activeMedia.length === 0 ? (
+                                <p className="text-sm text-ink/50">Nenhuma midia cadastrada para este exercicio.</p>
+                              ) : (
+                                <div className="grid gap-3 lg:grid-cols-2">
+                                  {activeMedia.map((media) => (
+                                    <MediaCard
+                                      key={media.id}
+                                      media={media}
+                                      onDeactivate={canEdit ? () => deactivateMedia(media) : undefined}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+
+                              {canEdit && exercise.is_active ? (
+                                <form
+                                  onSubmit={(event) => addMedia(event, exercise)}
+                                  className="mt-4 grid gap-3 rounded-xl border border-line bg-surface p-4 lg:grid-cols-2"
+                                >
+                                  <div>
+                                    <label className="label" htmlFor={`media-type-${exercise.id}`}>Tipo</label>
+                                    <select
+                                      id={`media-type-${exercise.id}`}
+                                      className="field"
+                                      value={draft.media_type}
+                                      onChange={(event) =>
+                                        setMediaForms((current) => ({
+                                          ...current,
+                                          [exercise.id]: { ...draft, media_type: event.target.value as TrainingMediaType }
+                                        }))
+                                      }
+                                    >
+                                      <option value="EXTERNAL_VIDEO">Video externo</option>
+                                      <option value="EXTERNAL_IMAGE">Imagem externa</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="label" htmlFor={`media-sort-${exercise.id}`}>Ordem da midia</label>
+                                    <input
+                                      id={`media-sort-${exercise.id}`}
+                                      className="field"
+                                      type="number"
+                                      min="0"
+                                      value={draft.sort_order}
+                                      onChange={(event) =>
+                                        setMediaForms((current) => ({
+                                          ...current,
+                                          [exercise.id]: { ...draft, sort_order: event.target.value }
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div className="lg:col-span-2">
+                                    <label className="label" htmlFor={`media-url-${exercise.id}`}>URL externa</label>
+                                    <input
+                                      id={`media-url-${exercise.id}`}
+                                      className="field"
+                                      placeholder="https://..."
+                                      value={draft.external_url}
+                                      onChange={(event) =>
+                                        setMediaForms((current) => ({
+                                          ...current,
+                                          [exercise.id]: { ...draft, external_url: event.target.value, file: null }
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="label" htmlFor={`media-file-${exercise.id}`}>Upload de imagem</label>
+                                    <input
+                                      id={`media-file-${exercise.id}`}
+                                      className="field"
+                                      type="file"
+                                      accept=".jpg,.jpeg,.png,.webp"
+                                      onChange={(event) =>
+                                        setMediaForms((current) => ({
+                                          ...current,
+                                          [exercise.id]: { ...draft, file: event.target.files?.[0] ?? null, external_url: "" }
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="label" htmlFor={`media-title-${exercise.id}`}>Titulo</label>
+                                    <input
+                                      id={`media-title-${exercise.id}`}
+                                      className="field"
+                                      value={draft.title}
+                                      onChange={(event) =>
+                                        setMediaForms((current) => ({
+                                          ...current,
+                                          [exercise.id]: { ...draft, title: event.target.value }
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div className="lg:col-span-2">
+                                    <label className="label" htmlFor={`media-description-${exercise.id}`}>Observacao da midia</label>
+                                    <input
+                                      id={`media-description-${exercise.id}`}
+                                      className="field"
+                                      value={draft.description}
+                                      onChange={(event) =>
+                                        setMediaForms((current) => ({
+                                          ...current,
+                                          [exercise.id]: { ...draft, description: event.target.value }
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <button className="btn-secondary w-full lg:col-span-2" type="submit" disabled={addingMediaId !== null}>
+                                    <ImagePlus className="h-4 w-4" aria-hidden />
+                                    {addingMediaId === exercise.id ? "Adicionando..." : "Adicionar midia"}
+                                  </button>
+                                </form>
+                              ) : null}
+                            </div>
+                          </details>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))
+            )}
+          </section>
+        </div>
+
+        <aside className="space-y-5 xl:col-span-2 2xl:col-span-1">
+          <section className="panel p-5">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="panel-title">Link do aluno</h2>
+                  <p className="mt-1 text-sm text-ink/55">
+                    Envie a versao publica da ficha para o celular do aluno.
+                  </p>
+                </div>
+                {shareLink ? <StatusBadge value="ATIVO" /> : null}
+              </div>
+            </div>
+
+            {shareLink ? (
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-line bg-paper px-3.5 py-3 text-xs font-medium text-ink/70 break-all">
+                  {shareLink.public_url}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button className="btn-secondary w-full" type="button" onClick={copyLink}>
+                    <Copy className="h-4 w-4" aria-hidden />
+                    Copiar link
+                  </button>
+                  <a className="btn-secondary w-full" href={shareLink.public_url} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4" aria-hidden />
+                    Abrir preview
+                  </a>
+                  <a
+                    className="btn-primary w-full sm:col-span-2"
+                    href={`https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Share2 className="h-4 w-4" aria-hidden />
+                    Enviar pelo WhatsApp
+                  </a>
+                  {canEdit ? (
+                    <button className="btn-danger w-full sm:col-span-2" type="button" onClick={revokeLink}>
+                      Revogar link
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4">
+                <EmptyState
+                  icon={Link2}
+                  title="Sem link publico ativo"
+                  hint={canEdit ? "Gere o link quando a ficha estiver pronta para envio." : "Peça ao ADMIN ou PROFESSOR para gerar o link."}
+                />
                 {canEdit ? (
-                  <button className="btn-danger w-full" type="button" onClick={revokeLink}>
-                    Revogar link
+                  <button className="btn-primary mt-3 w-full" type="button" onClick={generateLink} disabled={sharing}>
+                    <Link2 className="h-4 w-4" aria-hidden />
+                    {sharing ? "Gerando..." : "Gerar link do aluno"}
                   </button>
                 ) : null}
               </div>
-            </div>
-          ) : (
-            <div className="mt-4">
-              <EmptyState icon={Link2} title="Sem link publico ativo" hint={canEdit ? "Gere um link para enviar ao aluno." : "Peça ao ADMIN ou PROFESSOR para gerar o link."} />
-              {canEdit ? (
-                <button className="btn-primary mt-3 w-full" type="button" onClick={generateLink} disabled={sharing}>
-                  <Link2 className="h-4 w-4" aria-hidden />
-                  {sharing ? "Gerando..." : "Gerar link para aluno"}
-                </button>
-              ) : null}
-            </div>
-          )}
+            )}
+          </section>
+
+          <StudentPreviewPhone
+            plan={plan}
+            groups={publicPreviewGroups}
+            shareLink={shareLink}
+            estimatedDuration={estimatedDuration}
+          />
         </aside>
-      </section>
-
-      {canEdit ? (
-        <form onSubmit={createExercise} className="panel p-5">
-          <h2 className="panel-title">Novo exercicio</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-4">
-            <div className="md:col-span-2">
-              <label className="label" htmlFor="exercise-name">Exercicio</label>
-              <input id="exercise-name" className="field" required value={exerciseForm.name} onChange={(event) => setExerciseForm({ ...exerciseForm, name: event.target.value })} />
-            </div>
-            <div>
-              <label className="label" htmlFor="exercise-group">Grupo muscular</label>
-              <input id="exercise-group" className="field" value={exerciseForm.muscle_group} onChange={(event) => setExerciseForm({ ...exerciseForm, muscle_group: event.target.value })} />
-            </div>
-            <div>
-              <label className="label" htmlFor="exercise-order">Ordem</label>
-              <input id="exercise-order" className="field" type="number" min="0" value={exerciseForm.sort_order} onChange={(event) => setExerciseForm({ ...exerciseForm, sort_order: event.target.value })} />
-            </div>
-            <input className="field" placeholder="Series" value={exerciseForm.sets} onChange={(event) => setExerciseForm({ ...exerciseForm, sets: event.target.value })} aria-label="Series" />
-            <input className="field" placeholder="Repeticoes" value={exerciseForm.repetitions} onChange={(event) => setExerciseForm({ ...exerciseForm, repetitions: event.target.value })} aria-label="Repeticoes" />
-            <input className="field" placeholder="Carga" value={exerciseForm.load} onChange={(event) => setExerciseForm({ ...exerciseForm, load: event.target.value })} aria-label="Carga" />
-            <input className="field" placeholder="Descanso" value={exerciseForm.rest} onChange={(event) => setExerciseForm({ ...exerciseForm, rest: event.target.value })} aria-label="Descanso" />
-            <div className="md:col-span-3">
-              <label className="label" htmlFor="exercise-notes">Observacao</label>
-              <input id="exercise-notes" className="field" value={exerciseForm.notes} onChange={(event) => setExerciseForm({ ...exerciseForm, notes: event.target.value })} />
-            </div>
-            <button className="btn-primary" type="submit" disabled={creatingExercise}>
-              <Plus className="h-4 w-4" aria-hidden />
-              {creatingExercise ? "Adicionando..." : "Adicionar"}
-            </button>
-          </div>
-        </form>
-      ) : null}
-
-      <section className="panel p-5">
-        <h2 className="panel-title">Exercicios</h2>
-        <div className="mt-4 space-y-3">
-          {plan.exercises.length === 0 ? (
-            <EmptyState icon={Dumbbell} title="Nenhum exercicio cadastrado" />
-          ) : (
-            plan.exercises.map((exercise) => {
-              const draft = mediaForms[exercise.id] ?? emptyMedia();
-              return (
-                <article key={exercise.id} className={`rounded-lg border p-4 ${exercise.is_active ? "border-line bg-surface" : "border-line bg-paper opacity-75"}`}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-bold text-ink">{exercise.name}</h3>
-                        <StatusBadge value={exercise.is_active ? "ATIVO" : "INATIVO"} />
-                      </div>
-                      <p className="mt-1 text-sm text-ink/55">{exercise.muscle_group || "Sem grupo muscular"}</p>
-                    </div>
-                    {canEdit && exercise.is_active ? (
-                      <button className="btn-secondary w-full px-3 sm:w-auto" type="button" onClick={() => deactivateExercise(exercise)}>
-                        <Trash2 className="h-4 w-4" aria-hidden />
-                        Inativar
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-5">
-                    <Info label="Series" value={exercise.sets} />
-                    <Info label="Repeticoes" value={exercise.repetitions} />
-                    <Info label="Carga" value={exercise.load} />
-                    <Info label="Descanso" value={exercise.rest} />
-                    <Info label="Ordem" value={exercise.sort_order} />
-                  </div>
-                  {exercise.notes ? <p className="mt-3 rounded-lg bg-paper p-3 text-sm text-ink/70">{exercise.notes}</p> : null}
-
-                  <div className="mt-4 border-t border-line pt-4">
-                    <h4 className="text-sm font-bold text-ink">Midias do exercicio</h4>
-                    {exercise.media.filter((media) => media.is_active).length === 0 ? (
-                      <p className="mt-2 text-sm text-ink/50">Nenhuma midia cadastrada.</p>
-                    ) : (
-                      <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        {exercise.media.filter((media) => media.is_active).map((media) => (
-                          <div key={media.id} className="rounded-lg border border-line bg-paper p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-ink">{media.title || mediaLabels[media.media_type]}</p>
-                                <p className="text-xs text-ink/55">{mediaLabels[media.media_type]}</p>
-                              </div>
-                              {canEdit ? (
-                                <button className="btn-ghost px-2" type="button" aria-label="Inativar midia" onClick={() => deactivateMedia(media)}>
-                                  <Trash2 className="h-4 w-4" aria-hidden />
-                                </button>
-                              ) : null}
-                            </div>
-                            {media.external_url || media.file_url ? (
-                              <a className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline" href={media.external_url || mediaUrl(media.file_url)} target="_blank" rel="noreferrer">
-                                {media.media_type.includes("VIDEO") ? <Video className="h-4 w-4" aria-hidden /> : <ImagePlus className="h-4 w-4" aria-hidden />}
-                                Abrir midia
-                              </a>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {canEdit && exercise.is_active ? (
-                      <form onSubmit={(event) => addMedia(event, exercise)} className="mt-4 grid gap-3 rounded-lg border border-line bg-paper/60 p-3 md:grid-cols-[160px_1fr_1fr_auto] md:items-end">
-                        <div>
-                          <label className="label" htmlFor={`media-type-${exercise.id}`}>Tipo</label>
-                          <select
-                            id={`media-type-${exercise.id}`}
-                            className="field"
-                            value={draft.media_type}
-                            onChange={(event) => setMediaForms((current) => ({
-                              ...current,
-                              [exercise.id]: { ...draft, media_type: event.target.value as TrainingMediaType }
-                            }))}
-                          >
-                            <option value="EXTERNAL_VIDEO">Video externo</option>
-                            <option value="EXTERNAL_IMAGE">Imagem externa</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="label" htmlFor={`media-url-${exercise.id}`}>URL externa</label>
-                          <input
-                            id={`media-url-${exercise.id}`}
-                            className="field"
-                            placeholder="https://..."
-                            value={draft.external_url}
-                            onChange={(event) => setMediaForms((current) => ({
-                              ...current,
-                              [exercise.id]: { ...draft, external_url: event.target.value, file: null }
-                            }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="label" htmlFor={`media-file-${exercise.id}`}>Upload imagem</label>
-                          <input
-                            id={`media-file-${exercise.id}`}
-                            className="field"
-                            type="file"
-                            accept=".jpg,.jpeg,.png,.webp"
-                            onChange={(event) => setMediaForms((current) => ({
-                              ...current,
-                              [exercise.id]: { ...draft, file: event.target.files?.[0] ?? null, external_url: "" }
-                            }))}
-                          />
-                        </div>
-                        <button className="btn-secondary w-full" type="submit" disabled={addingMediaId !== null}>
-                          <ImagePlus className="h-4 w-4" aria-hidden />
-                          {addingMediaId === exercise.id ? "Adicionando..." : "Adicionar midia"}
-                        </button>
-                        <div className="md:col-span-2">
-                          <label className="label" htmlFor={`media-title-${exercise.id}`}>Titulo</label>
-                          <input
-                            id={`media-title-${exercise.id}`}
-                            className="field"
-                            value={draft.title}
-                            onChange={(event) => setMediaForms((current) => ({
-                              ...current,
-                              [exercise.id]: { ...draft, title: event.target.value }
-                            }))}
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <label className="label" htmlFor={`media-description-${exercise.id}`}>Observacao da midia</label>
-                          <input
-                            id={`media-description-${exercise.id}`}
-                            className="field"
-                            value={draft.description}
-                            onChange={(event) => setMediaForms((current) => ({
-                              ...current,
-                              [exercise.id]: { ...draft, description: event.target.value }
-                            }))}
-                          />
-                        </div>
-                      </form>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })
-          )}
-        </div>
-      </section>
+      </div>
     </div>
   );
 }
 
-function Info({ label, value }: { label: string; value?: string | number | null }) {
+function MetricCard({
+  icon,
+  label,
+  value
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="rounded-lg bg-paper px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink/45">{label}</p>
-      <p className="mt-0.5 text-sm font-bold text-ink">{value || "-"}</p>
+    <div className="rounded-xl border border-line bg-paper px-4 py-3">
+      <div className="flex items-center gap-2 text-ink/55">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface text-brand">
+          {icon}
+        </span>
+        <p className="text-xs font-semibold uppercase tracking-wide">{label}</p>
+      </div>
+      <p className="mt-3 text-lg font-bold tracking-tight text-ink">{value}</p>
     </div>
+  );
+}
+
+function ExercisePill({ value, subdued = false }: { value: string; subdued?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+        subdued ? "bg-paper text-ink/60" : "bg-brand-soft text-brand-dark"
+      }`}
+    >
+      {value}
+    </span>
+  );
+}
+
+function MediaCard({
+  media,
+  onDeactivate
+}: {
+  media: TrainingPlanExerciseMedia;
+  onDeactivate?: () => void;
+}) {
+  const href = media.external_url || mediaUrl(media.file_url);
+  const isVideo = media.media_type.includes("VIDEO");
+  const Icon = isVideo ? PlayCircle : ImageIcon;
+
+  return (
+    <div className="rounded-xl border border-line bg-paper p-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink">{media.title || mediaLabels[media.media_type]}</p>
+          <p className="mt-0.5 text-xs text-ink/55">{mediaLabels[media.media_type]}</p>
+        </div>
+        {onDeactivate ? (
+          <button className="btn-ghost px-2" type="button" aria-label="Inativar midia" onClick={onDeactivate}>
+            <Trash2 className="h-4 w-4" aria-hidden />
+          </button>
+        ) : null}
+      </div>
+
+      {media.description ? (
+        <p className="mt-3 text-sm leading-6 text-ink/70">{media.description}</p>
+      ) : null}
+
+      {href ? (
+        <a
+          className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline"
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Icon className="h-4 w-4" aria-hidden />
+          Abrir midia
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function StudentPreviewPhone({
+  plan,
+  groups,
+  shareLink,
+  estimatedDuration
+}: {
+  plan: TrainingPlan;
+  groups: ExerciseGroupSection[];
+  shareLink: TrainingPlanShareLink | null;
+  estimatedDuration: number | null;
+}) {
+  return (
+    <section className="panel overflow-hidden">
+      <div className="border-b border-line px-5 py-4">
+        <h2 className="panel-title">Previa do aluno</h2>
+        <p className="mt-1 text-sm text-ink/55">
+          Como a ficha aparece no celular quando o link publico e aberto.
+        </p>
+      </div>
+
+      <div className="bg-paper/80 px-4 py-5 sm:px-5">
+        <div className="mx-auto max-w-[290px] rounded-[32px] border-[10px] border-ink bg-ink shadow-[0_22px_45px_rgba(16,25,21,0.24)]">
+          <div className="mx-auto mt-3 h-6 w-28 rounded-full bg-black/85" />
+          <div className="h-[560px] overflow-y-auto rounded-[22px] bg-surface px-4 pb-5 pt-4">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-ink/50">
+              <span>AC Academia</span>
+              <span>{shareLink ? "Link ativo" : "Preview interno"}</span>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-line bg-paper p-4 shadow-[0_8px_20px_rgba(16,25,21,0.06)]">
+              <p className="text-lg font-bold tracking-tight text-ink">{plan.name}</p>
+              <p className="mt-1 text-sm font-semibold text-brand">{plan.student?.name || "Aluno"}</p>
+              {plan.objective ? <p className="mt-3 text-sm leading-6 text-ink/65">{plan.objective}</p> : null}
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+                {estimatedDuration ? (
+                  <span className="rounded-full bg-surface px-2.5 py-1 text-ink/65">{estimatedDuration} min</span>
+                ) : null}
+                {plan.start_date ? (
+                  <span className="rounded-full bg-surface px-2.5 py-1 text-ink/65">{formatDate(plan.start_date)}</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {groups.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line bg-paper px-4 py-8 text-center text-sm text-ink/50">
+                  Esta ficha ainda nao tem exercicios ativos.
+                </div>
+              ) : (
+                groups.map((group) => (
+                  <section key={group.group} className="rounded-2xl border border-line bg-paper p-3.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink/50">{group.group}</p>
+                      <span className="text-[11px] font-semibold text-ink/45">{group.entries.length}</span>
+                    </div>
+                    <div className="mt-3 space-y-2.5">
+                      {group.entries.map((exercise) => (
+                        <div key={exercise.id} className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                          <div className="flex items-start gap-2.5">
+                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-xs font-bold text-brand-dark">
+                              {exercise.sort_order}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-ink">{exercise.name}</p>
+                              {exerciseMeta(exercise).length > 0 ? (
+                                <p className="mt-1 text-xs text-ink/60">{exerciseMeta(exercise).join(" · ")}</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ))
+              )}
+            </div>
+
+            {plan.notes ? (
+              <div className="mt-4 rounded-2xl border border-warning/20 bg-warning-soft px-3.5 py-3 text-sm text-warning">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  <p>{plan.notes}</p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
