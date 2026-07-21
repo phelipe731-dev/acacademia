@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-import { ApiError, apiFetch, saveProfile } from "@/lib/api";
+import { ApiError, apiFetch, saveSession } from "@/lib/api";
 import type { Session, User } from "@/lib/types";
 import { Message } from "@/components/Message";
 
@@ -35,7 +35,7 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password })
       });
-      saveProfile(session.user);
+      saveSession(session.user, session.access_token);
       router.push("/app");
     } catch (error) {
       setMessage({ text: error instanceof ApiError ? error.message : "Erro ao entrar.", type: "error" });

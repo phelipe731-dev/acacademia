@@ -3,11 +3,12 @@ import type { User } from "@/lib/types";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const PROFILE_KEY = "ac_academia_profile";
 
-// O token de autenticação vive em um cookie httpOnly (setado pelo backend) e NÃO é
-// acessível a JavaScript — por isso guardamos apenas o perfil do usuário (nome/role)
-// no localStorage, só para a UI. O cookie é enviado automaticamente via credentials.
+// Em deploys com frontend e backend em domínios diferentes, o cookie pode falhar por
+// políticas de third-party cookies do navegador. Para o MVP, persistimos o bearer token
+// junto com o perfil e o reenviamos no header Authorization.
 export interface StoredSession {
   user: User;
+  accessToken: string;
 }
 
 export class ApiError extends Error {
@@ -51,7 +52,13 @@ export function getSession(): StoredSession | null {
 }
 
 export function saveProfile(user: User): void {
-  window.localStorage.setItem(PROFILE_KEY, JSON.stringify({ user }));
+  const current = getSession();
+  if (!current) return;
+  window.localStorage.setItem(PROFILE_KEY, JSON.stringify({ user, accessToken: current.accessToken }));
+}
+
+export function saveSession(user: User, accessToken: string): void {
+  window.localStorage.setItem(PROFILE_KEY, JSON.stringify({ user, accessToken }));
 }
 
 export function clearSession(): void {
@@ -67,10 +74,14 @@ function handleUnauthorized(): void {
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const hadSession = getSession() !== null;
+  const session = getSession();
+  const hadSession = session !== null;
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
+  }
+  if (session?.accessToken) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
   }
 
   const response = await fetch(`${API_URL}${path}`, {
@@ -113,8 +124,13 @@ export async function logout(): Promise<void> {
 }
 
 export async function apiDownload(path: string, filename: string): Promise<void> {
-  const hadSession = getSession() !== null;
-  const response = await fetch(`${API_URL}${path}`, { credentials: "include", cache: "no-store" });
+  const session = getSession();
+  const hadSession = session !== null;
+  const headers = new Headers();
+  if (session?.accessToken) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+  const response = await fetch(`${API_URL}${path}`, { headers, credentials: "include", cache: "no-store" });
   if (!response.ok) {
     if (response.status === 401 && hadSession) {
       handleUnauthorized();
