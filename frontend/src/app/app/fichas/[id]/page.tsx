@@ -378,24 +378,24 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
         title={plan.name}
         subtitle={plan.student ? `Ficha de ${plan.student.name}` : "Ficha de treino"}
       >
-        <Link className="btn-secondary" href={`/app/alunos/${plan.student_id}`}>
+        <Link className="btn-secondary w-full sm:w-auto" href={`/app/alunos/${plan.student_id}`}>
           Voltar ao aluno
         </Link>
         {canEdit ? (
           shareLink ? (
-            <button className="btn-secondary" type="button" onClick={copyLink}>
+            <button className="btn-secondary w-full sm:w-auto" type="button" onClick={copyLink}>
               <Copy className="h-4 w-4" aria-hidden />
               Copiar link
             </button>
           ) : (
-            <button className="btn-secondary" type="button" onClick={generateLink} disabled={sharing}>
+            <button className="btn-secondary w-full sm:w-auto" type="button" onClick={generateLink} disabled={sharing}>
               <Link2 className="h-4 w-4" aria-hidden />
               {sharing ? "Gerando..." : "Gerar link"}
             </button>
           )
         ) : null}
         {canEdit ? (
-          <button className="btn-primary" type="submit" form={planFormId} disabled={savingPlan}>
+          <button className="btn-primary w-full sm:w-auto" type="submit" form={planFormId} disabled={savingPlan}>
             <Save className="h-4 w-4" aria-hidden />
             {savingPlan ? "Salvando..." : "Salvar ficha"}
           </button>
@@ -404,11 +404,49 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
 
       {message ? <Message message={message.text} type={message.type} /> : null}
 
+      <section className="grid gap-4 lg:hidden">
+        <div className="panel p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/45">Resumo rapido</p>
+              <h2 className="mt-1 text-lg font-bold tracking-tight text-ink">{plan.student?.name || "Aluno"}</h2>
+              <p className="mt-1 text-sm text-ink/55">{plan.objective || "Ficha pronta para ajuste e acompanhamento."}</p>
+            </div>
+            <StatusBadge value={plan.is_active ? "ATIVO" : "INATIVO"} />
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <MetricCard
+              icon={<Dumbbell className="h-4 w-4" aria-hidden />}
+              label="Exercicios"
+              value={String(activeExercises.length)}
+            />
+            <MetricCard
+              icon={<Clock3 className="h-4 w-4" aria-hidden />}
+              label="Duracao"
+              value={estimatedDuration ? `${estimatedDuration} min` : "-"}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <a className="btn-secondary w-full px-3" href="#link-aluno">
+            Link
+          </a>
+          <a className="btn-secondary w-full px-3" href="#dados-ficha">
+            Dados
+          </a>
+          <a className="btn-secondary w-full px-3" href="#exercicios-ficha">
+            Exercicios
+          </a>
+        </div>
+      </section>
+
       <div className="grid gap-5 xl:grid-cols-[320px,minmax(0,1fr)] 2xl:grid-cols-[320px,minmax(0,1fr),340px]">
-        <aside className="space-y-5">
-          <form id={planFormId} onSubmit={savePlan} className="panel p-5">
+        <aside className="order-2 space-y-5 xl:order-1">
+          <form id={planFormId} onSubmit={savePlan} className="panel p-5" aria-label="Dados da ficha" >
             <div className="flex items-start justify-between gap-3">
               <div>
+                <div id="dados-ficha" className="sr-only" aria-hidden />
                 <h2 className="panel-title">Dados da ficha</h2>
                 <p className="mt-1 text-sm text-ink/55">
                   Ajuste objetivo, datas e orientacoes principais do treino.
@@ -502,7 +540,7 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
 
           <section className="panel p-5">
             <h2 className="panel-title">Resumo da ficha</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-1 2xl:grid-cols-2">
               <MetricCard
                 icon={<Dumbbell className="h-4 w-4" aria-hidden />}
                 label="Exercicios ativos"
@@ -533,9 +571,9 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
           </section>
         </aside>
 
-        <div className="space-y-5">
+        <div className="order-3 space-y-5 xl:order-2">
           {canEdit ? (
-            <section className="panel p-5">
+            <section id="exercicios-ficha" className="panel p-5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h2 className="panel-title">Adicionar exercicio</h2>
@@ -548,77 +586,97 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
                 </div>
               </div>
 
-              <form onSubmit={createExercise} className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.3fr),minmax(0,0.9fr),110px]">
-                <div>
-                  <label className="label" htmlFor="exercise-name">Exercicio</label>
-                  <input
-                    id="exercise-name"
-                    className="field"
-                    required
-                    value={exerciseForm.name}
-                    onChange={(event) => setExerciseForm({ ...exerciseForm, name: event.target.value })}
-                    placeholder="Supino reto com barra"
-                  />
+              <form onSubmit={createExercise} className="mt-5 space-y-3">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr),minmax(0,0.9fr),110px]">
+                  <div>
+                    <label className="label" htmlFor="exercise-name">Exercicio</label>
+                    <input
+                      id="exercise-name"
+                      className="field"
+                      required
+                      value={exerciseForm.name}
+                      onChange={(event) => setExerciseForm({ ...exerciseForm, name: event.target.value })}
+                      placeholder="Supino reto com barra"
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="exercise-group">Grupo muscular</label>
+                    <input
+                      id="exercise-group"
+                      className="field"
+                      value={exerciseForm.muscle_group}
+                      onChange={(event) => setExerciseForm({ ...exerciseForm, muscle_group: event.target.value })}
+                      placeholder="Peito, Costas, Pernas..."
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="exercise-order">Ordem</label>
+                    <input
+                      id="exercise-order"
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={exerciseForm.sort_order}
+                      onChange={(event) => setExerciseForm({ ...exerciseForm, sort_order: event.target.value })}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="label" htmlFor="exercise-group">Grupo muscular</label>
-                  <input
-                    id="exercise-group"
-                    className="field"
-                    value={exerciseForm.muscle_group}
-                    onChange={(event) => setExerciseForm({ ...exerciseForm, muscle_group: event.target.value })}
-                    placeholder="Peito, Costas, Pernas..."
-                  />
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4">
+                  <div>
+                    <label className="label" htmlFor="exercise-sets">Series</label>
+                    <input
+                      id="exercise-sets"
+                      className="field"
+                      placeholder="4"
+                      value={exerciseForm.sets}
+                      onChange={(event) => setExerciseForm({ ...exerciseForm, sets: event.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="exercise-repetitions">Repeticoes</label>
+                    <input
+                      id="exercise-repetitions"
+                      className="field"
+                      placeholder="10 a 12"
+                      value={exerciseForm.repetitions}
+                      onChange={(event) => setExerciseForm({ ...exerciseForm, repetitions: event.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="exercise-load">Carga</label>
+                    <input
+                      id="exercise-load"
+                      className="field"
+                      placeholder="Moderada"
+                      value={exerciseForm.load}
+                      onChange={(event) => setExerciseForm({ ...exerciseForm, load: event.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="exercise-rest">Descanso</label>
+                    <input
+                      id="exercise-rest"
+                      className="field"
+                      placeholder="60s"
+                      value={exerciseForm.rest}
+                      onChange={(event) => setExerciseForm({ ...exerciseForm, rest: event.target.value })}
+                    />
+                  </div>
                 </div>
+
                 <div>
-                  <label className="label" htmlFor="exercise-order">Ordem</label>
+                  <label className="label" htmlFor="exercise-notes">Observacao curta</label>
                   <input
-                    id="exercise-order"
+                    id="exercise-notes"
                     className="field"
-                    type="number"
-                    min="0"
-                    value={exerciseForm.sort_order}
-                    onChange={(event) => setExerciseForm({ ...exerciseForm, sort_order: event.target.value })}
-                  />
-                </div>
-                <input
-                  className="field"
-                  placeholder="Series"
-                  value={exerciseForm.sets}
-                  onChange={(event) => setExerciseForm({ ...exerciseForm, sets: event.target.value })}
-                  aria-label="Series"
-                />
-                <input
-                  className="field"
-                  placeholder="Repeticoes"
-                  value={exerciseForm.repetitions}
-                  onChange={(event) => setExerciseForm({ ...exerciseForm, repetitions: event.target.value })}
-                  aria-label="Repeticoes"
-                />
-                <input
-                  className="field"
-                  placeholder="Carga"
-                  value={exerciseForm.load}
-                  onChange={(event) => setExerciseForm({ ...exerciseForm, load: event.target.value })}
-                  aria-label="Carga"
-                />
-                <input
-                  className="field"
-                  placeholder="Descanso"
-                  value={exerciseForm.rest}
-                  onChange={(event) => setExerciseForm({ ...exerciseForm, rest: event.target.value })}
-                  aria-label="Descanso"
-                />
-                <div className="lg:col-span-2">
-                  <input
-                    className="field"
-                    placeholder="Observacao curta para a execucao"
+                    placeholder="Execucao, postura, amplitude, respiracao..."
                     value={exerciseForm.notes}
                     onChange={(event) => setExerciseForm({ ...exerciseForm, notes: event.target.value })}
-                    aria-label="Observacao"
                   />
                 </div>
-                <button className="btn-primary w-full lg:col-span-3" type="submit" disabled={creatingExercise}>
+
+                <button className="btn-primary w-full" type="submit" disabled={creatingExercise}>
                   <Plus className="h-4 w-4" aria-hidden />
                   {creatingExercise ? "Adicionando..." : "Adicionar exercicio"}
                 </button>
@@ -665,9 +723,11 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
                                   {exerciseNumberById.get(exercise.id) ?? "-"}
                                 </span>
                                 <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
+                                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                     <h3 className="text-base font-bold tracking-tight text-ink">{exercise.name}</h3>
-                                    <StatusBadge value={exercise.is_active ? "ATIVO" : "INATIVO"} />
+                                    <div className="w-fit">
+                                      <StatusBadge value={exercise.is_active ? "ATIVO" : "INATIVO"} />
+                                    </div>
                                   </div>
                                   <p className="mt-1 text-sm text-ink/55">
                                     {exercise.muscle_group || "Sem grupo muscular definido"}
@@ -847,8 +907,8 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
           </section>
         </div>
 
-        <aside className="space-y-5 xl:col-span-2 2xl:col-span-1">
-          <section className="panel p-5">
+        <aside className="order-1 space-y-5 xl:order-3 xl:col-span-2 2xl:col-span-1 2xl:sticky 2xl:top-5 2xl:self-start">
+          <section id="link-aluno" className="panel p-5">
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -1014,21 +1074,21 @@ function StudentPreviewPhone({
       <div className="border-b border-line px-5 py-4">
         <h2 className="panel-title">Previa do aluno</h2>
         <p className="mt-1 text-sm text-ink/55">
-          Como a ficha aparece no celular quando o link publico e aberto.
+          Como a ficha se adapta no celular e tambem em telas maiores.
         </p>
       </div>
 
       <div className="bg-paper/80 px-4 py-5 sm:px-5">
-        <div className="mx-auto max-w-[290px] rounded-[32px] border-[10px] border-ink bg-ink shadow-[0_22px_45px_rgba(16,25,21,0.24)]">
-          <div className="mx-auto mt-3 h-6 w-28 rounded-full bg-black/85" />
-          <div className="h-[560px] overflow-y-auto rounded-[22px] bg-surface px-4 pb-5 pt-4">
+        <div className="mx-auto max-w-full rounded-[28px] border border-line bg-surface shadow-[0_18px_40px_rgba(16,25,21,0.12)] sm:max-w-[290px] sm:rounded-[32px] sm:border-[10px] sm:border-ink sm:bg-ink sm:shadow-[0_22px_45px_rgba(16,25,21,0.24)]">
+          <div className="mx-auto mt-3 hidden h-6 w-28 rounded-full bg-black/85 sm:block" />
+          <div className="rounded-[22px] bg-surface px-4 pb-5 pt-4 sm:h-[560px] sm:overflow-y-auto">
             <div className="flex items-center justify-between text-[11px] font-semibold text-ink/50">
               <span>AC Academia</span>
               <span>{shareLink ? "Link ativo" : "Preview interno"}</span>
             </div>
 
             <div className="mt-4 rounded-2xl border border-line bg-paper p-4 shadow-[0_8px_20px_rgba(16,25,21,0.06)]">
-              <p className="text-lg font-bold tracking-tight text-ink">{plan.name}</p>
+              <p className="text-xl font-bold tracking-tight text-ink">{plan.name}</p>
               <p className="mt-1 text-sm font-semibold text-brand">{plan.student?.name || "Aluno"}</p>
               {plan.objective ? <p className="mt-3 text-sm leading-6 text-ink/65">{plan.objective}</p> : null}
               <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
@@ -1038,10 +1098,15 @@ function StudentPreviewPhone({
                 {plan.start_date ? (
                   <span className="rounded-full bg-surface px-2.5 py-1 text-ink/65">{formatDate(plan.start_date)}</span>
                 ) : null}
+                {plan.reassessment_date ? (
+                  <span className="rounded-full bg-surface px-2.5 py-1 text-ink/65">
+                    Reavaliacao {formatDate(plan.reassessment_date)}
+                  </span>
+                ) : null}
               </div>
             </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
               {groups.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-line bg-paper px-4 py-8 text-center text-sm text-ink/50">
                   Esta ficha ainda nao tem exercicios ativos.
@@ -1064,6 +1129,9 @@ function StudentPreviewPhone({
                               <p className="text-sm font-semibold text-ink">{exercise.name}</p>
                               {exerciseMeta(exercise).length > 0 ? (
                                 <p className="mt-1 text-xs text-ink/60">{exerciseMeta(exercise).join(" · ")}</p>
+                              ) : null}
+                              {exercise.notes ? (
+                                <p className="mt-2 text-xs leading-5 text-ink/55">{exercise.notes}</p>
                               ) : null}
                             </div>
                           </div>
