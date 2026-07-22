@@ -1074,66 +1074,63 @@ function StudentPreviewPhone({
       <div className="border-b border-line px-5 py-4">
         <h2 className="panel-title">Previa do aluno</h2>
         <p className="mt-1 text-sm text-ink/55">
-          Como a ficha se adapta no celular e tambem em telas maiores.
+          Visual da pagina publica aberta pelo link do aluno.
         </p>
       </div>
 
-      <div className="bg-paper/80 px-4 py-5 sm:px-5">
-        <div className="mx-auto max-w-full rounded-[28px] border border-line bg-surface shadow-[0_18px_40px_rgba(16,25,21,0.12)] sm:max-w-[290px] sm:rounded-[32px] sm:border-[10px] sm:border-ink sm:bg-ink sm:shadow-[0_22px_45px_rgba(16,25,21,0.24)]">
-          <div className="mx-auto mt-3 hidden h-6 w-28 rounded-full bg-black/85 sm:block" />
-          <div className="rounded-[22px] bg-surface px-4 pb-5 pt-4 sm:h-[560px] sm:overflow-y-auto">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-ink/50">
-              <span>AC Academia</span>
-              <span>{shareLink ? "Link ativo" : "Preview interno"}</span>
+      <div className="bg-[#f5f7f5] px-4 py-5 sm:px-5">
+        <div className="mx-auto max-w-[390px] border border-[#dfe4df] bg-white">
+          <div className="flex items-center justify-between gap-3 border-b border-[#e3e7e3] px-4 py-3">
+            <div>
+              <p className="text-xs font-bold text-[#202522]">AC Academia</p>
+              <p className="mt-0.5 text-[11px] text-[#707772]">Ficha de treino</p>
+            </div>
+            <span className="text-[11px] font-medium text-[#166534]">
+              {shareLink ? "Link ativo" : "Previa interna"}
+            </span>
+          </div>
+
+          <div className="px-4 py-5">
+            <p className="text-[11px] font-semibold text-[#166534]">TREINO ATUAL</p>
+            <p className="mt-1.5 text-xl font-bold leading-tight text-[#202522]">{plan.name}</p>
+            <p className="mt-2 text-sm font-medium text-[#555d57]">{plan.student?.name || "Aluno"}</p>
+            {plan.objective ? <p className="mt-3 text-sm leading-6 text-[#626963]">{plan.objective}</p> : null}
+
+            <div className="mt-4 space-y-2 border-y border-[#e3e7e3] py-3 text-xs text-[#626963]">
+              {estimatedDuration ? <p>{estimatedDuration} min de treino</p> : null}
+              {plan.start_date ? <p>Inicio {formatDate(plan.start_date)}</p> : null}
+              {plan.reassessment_date ? <p>Reavaliacao {formatDate(plan.reassessment_date)}</p> : null}
             </div>
 
-            <div className="mt-4 rounded-2xl border border-line bg-paper p-4 shadow-[0_8px_20px_rgba(16,25,21,0.06)]">
-              <p className="text-xl font-bold tracking-tight text-ink">{plan.name}</p>
-              <p className="mt-1 text-sm font-semibold text-brand">{plan.student?.name || "Aluno"}</p>
-              {plan.objective ? <p className="mt-3 text-sm leading-6 text-ink/65">{plan.objective}</p> : null}
-              <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
-                {estimatedDuration ? (
-                  <span className="rounded-full bg-surface px-2.5 py-1 text-ink/65">{estimatedDuration} min</span>
-                ) : null}
-                {plan.start_date ? (
-                  <span className="rounded-full bg-surface px-2.5 py-1 text-ink/65">{formatDate(plan.start_date)}</span>
-                ) : null}
-                {plan.reassessment_date ? (
-                  <span className="rounded-full bg-surface px-2.5 py-1 text-ink/65">
-                    Reavaliacao {formatDate(plan.reassessment_date)}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+            <div className="mt-5">
+              <p className="text-base font-bold text-[#202522]">Exercicios</p>
               {groups.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-line bg-paper px-4 py-8 text-center text-sm text-ink/50">
+                <div className="mt-3 border border-dashed border-[#cfd5d0] px-4 py-8 text-center text-sm text-[#707772]">
                   Esta ficha ainda nao tem exercicios ativos.
                 </div>
               ) : (
                 groups.map((group) => (
-                  <section key={group.group} className="rounded-2xl border border-line bg-paper p-3.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink/50">{group.group}</p>
-                      <span className="text-[11px] font-semibold text-ink/45">{group.entries.length}</span>
+                  <section key={group.group} className="mt-5 border-t-2 border-[#166534] pt-3">
+                    <div className="flex items-center justify-between gap-3 pb-2.5">
+                      <p className="text-xs font-bold text-[#27302a]">{group.group}</p>
+                      <span className="text-[11px] font-medium text-[#707772]">{group.entries.length}</span>
                     </div>
-                    <div className="mt-3 space-y-2.5">
+                    <div className="divide-y divide-[#e6e9e6] border-y border-[#e6e9e6]">
                       {group.entries.map((exercise) => (
-                        <div key={exercise.id} className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <div className="flex items-start gap-2.5">
-                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-xs font-bold text-brand-dark">
-                              {exercise.sort_order}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-ink">{exercise.name}</p>
-                              {exerciseMeta(exercise).length > 0 ? (
-                                <p className="mt-1 text-xs text-ink/60">{exerciseMeta(exercise).join(" · ")}</p>
-                              ) : null}
-                              {exercise.notes ? (
-                                <p className="mt-2 text-xs leading-5 text-ink/55">{exercise.notes}</p>
-                              ) : null}
-                            </div>
+                        <div key={exercise.id} className="flex items-start gap-2.5 py-3">
+                          <span className="mt-0.5 w-6 shrink-0 text-center text-xs font-bold text-[#166534]">
+                            {String(exercise.sort_order).padStart(2, "0")}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-[#252b27]">{exercise.name}</p>
+                            {exerciseMeta(exercise).length > 0 ? (
+                              <p className="mt-1 text-xs text-[#69716b]">{exerciseMeta(exercise).join(" · ")}</p>
+                            ) : null}
+                            {exercise.notes ? (
+                              <p className="mt-2 border-l-2 border-[#a7b9aa] pl-2.5 text-xs leading-5 text-[#59605b]">
+                                {exercise.notes}
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -1144,9 +1141,9 @@ function StudentPreviewPhone({
             </div>
 
             {plan.notes ? (
-              <div className="mt-4 rounded-2xl border border-warning/20 bg-warning-soft px-3.5 py-3 text-sm text-warning">
+              <div className="mt-5 border-l-4 border-[#b7791f] bg-[#fffbeb] px-3 py-3 text-sm text-[#704b16]">
                 <div className="flex items-start gap-2">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
                   <p>{plan.notes}</p>
                 </div>
               </div>
