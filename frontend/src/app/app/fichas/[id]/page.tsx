@@ -1078,56 +1078,56 @@ function StudentPreviewPhone({
         </p>
       </div>
 
-      <div className="bg-[#f5f7f5] px-4 py-5 sm:px-5">
-        <div className="mx-auto max-w-[390px] border border-[#dfe4df] bg-white">
-          <div className="flex items-center justify-between gap-3 border-b border-[#e3e7e3] px-4 py-3">
+      <div className="bg-paper px-4 py-5 sm:px-5">
+        <div className="mx-auto max-w-[390px] border border-line bg-white">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
             <div>
-              <p className="text-xs font-bold text-[#202522]">AC Academia</p>
-              <p className="mt-0.5 text-[11px] text-[#707772]">Ficha de treino</p>
+              <p className="text-xs font-bold text-ink">AC Academia</p>
+              <p className="mt-0.5 text-[11px] text-muted">Ficha de treino</p>
             </div>
-            <span className="text-[11px] font-medium text-[#166534]">
+            <span className="text-[11px] font-medium text-brand">
               {shareLink ? "Link ativo" : "Previa interna"}
             </span>
           </div>
 
           <div className="px-4 py-5">
-            <p className="text-[11px] font-semibold text-[#166534]">TREINO ATUAL</p>
-            <p className="mt-1.5 text-xl font-bold leading-tight text-[#202522]">{plan.name}</p>
-            <p className="mt-2 text-sm font-medium text-[#555d57]">{plan.student?.name || "Aluno"}</p>
-            {plan.objective ? <p className="mt-3 text-sm leading-6 text-[#626963]">{plan.objective}</p> : null}
+            <p className="text-[11px] font-semibold text-brand">TREINO ATUAL</p>
+            <p className="mt-1.5 text-xl font-bold leading-tight text-ink">{plan.name}</p>
+            <p className="mt-2 text-sm font-medium text-ink/70">{plan.student?.name || "Aluno"}</p>
+            {plan.objective ? <p className="mt-3 text-sm leading-6 text-ink/65">{plan.objective}</p> : null}
 
-            <div className="mt-4 space-y-2 border-y border-[#e3e7e3] py-3 text-xs text-[#626963]">
+            <div className="mt-4 space-y-2 border-y border-line py-3 text-xs text-ink/65">
               {estimatedDuration ? <p>{estimatedDuration} min de treino</p> : null}
               {plan.start_date ? <p>Inicio {formatDate(plan.start_date)}</p> : null}
               {plan.reassessment_date ? <p>Reavaliacao {formatDate(plan.reassessment_date)}</p> : null}
             </div>
 
             <div className="mt-5">
-              <p className="text-base font-bold text-[#202522]">Exercicios</p>
+              <p className="text-base font-bold text-ink">Exercicios</p>
               {groups.length === 0 ? (
-                <div className="mt-3 border border-dashed border-[#cfd5d0] px-4 py-8 text-center text-sm text-[#707772]">
+                <div className="mt-3 border border-dashed border-line px-4 py-8 text-center text-sm text-muted">
                   Esta ficha ainda nao tem exercicios ativos.
                 </div>
               ) : (
                 groups.map((group) => (
-                  <section key={group.group} className="mt-5 border-t-2 border-[#166534] pt-3">
+                  <section key={group.group} className="mt-5 border-t-2 border-brand pt-3">
                     <div className="flex items-center justify-between gap-3 pb-2.5">
-                      <p className="text-xs font-bold text-[#27302a]">{group.group}</p>
-                      <span className="text-[11px] font-medium text-[#707772]">{group.entries.length}</span>
+                      <p className="text-xs font-bold text-ink">{group.group}</p>
+                      <span className="text-[11px] font-medium text-muted">{group.entries.length}</span>
                     </div>
-                    <div className="divide-y divide-[#e6e9e6] border-y border-[#e6e9e6]">
+                    <div className="divide-y divide-line border-y border-line">
                       {group.entries.map((exercise) => (
                         <div key={exercise.id} className="flex items-start gap-2.5 py-3">
-                          <span className="mt-0.5 w-6 shrink-0 text-center text-xs font-bold text-[#166534]">
+                          <span className="mt-0.5 w-6 shrink-0 text-center text-xs font-bold text-brand">
                             {String(exercise.sort_order).padStart(2, "0")}
                           </span>
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-[#252b27]">{exercise.name}</p>
+                            <p className="text-sm font-semibold text-ink">{exercise.name}</p>
                             {exerciseMeta(exercise).length > 0 ? (
-                              <p className="mt-1 text-xs text-[#69716b]">{exerciseMeta(exercise).join(" · ")}</p>
+                              <p className="mt-1 text-xs text-muted">{exerciseMeta(exercise).join(" · ")}</p>
                             ) : null}
                             {exercise.notes ? (
-                              <p className="mt-2 border-l-2 border-[#a7b9aa] pl-2.5 text-xs leading-5 text-[#59605b]">
+                              <p className="mt-2 border-l-2 border-brand-200 pl-2.5 text-xs leading-5 text-ink/65">
                                 {exercise.notes}
                               </p>
                             ) : null}
@@ -1141,7 +1141,7 @@ function StudentPreviewPhone({
             </div>
 
             {plan.notes ? (
-              <div className="mt-5 border-l-4 border-[#b7791f] bg-[#fffbeb] px-3 py-3 text-sm text-[#704b16]">
+              <div className="mt-5 border-l-4 border-brand bg-brand-soft px-3 py-3 text-sm text-brand-deep">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
                   <p>{plan.notes}</p>

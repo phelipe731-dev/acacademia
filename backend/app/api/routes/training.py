@@ -42,6 +42,7 @@ TRAINING_EDIT_ROLES = (UserRole.ADMIN, UserRole.PROFESSOR)
 TRAINING_VIEW_ROLES = (UserRole.ADMIN, UserRole.PROFESSOR, UserRole.RECEPCAO)
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+SHARE_TOKEN_BYTES = 9
 
 
 def utcnow() -> datetime:
@@ -74,7 +75,7 @@ def get_exercise_or_404(db: Session, exercise_id: int) -> TrainingPlanExercise:
 
 
 def public_url_for(token: str) -> str:
-    return f"{settings.frontend_public_url.rstrip('/')}/treino/{token}"
+    return f"{settings.frontend_public_url.rstrip('/')}/t/{token}"
 
 
 def share_link_response(link: TrainingPlanShareLink) -> TrainingPlanShareLinkRead:
@@ -379,9 +380,9 @@ def create_share_link(
     current = active_share_link(db, training_plan_id)
     if current:
         return share_link_response(current)
-    token = secrets.token_urlsafe(32)
+    token = secrets.token_urlsafe(SHARE_TOKEN_BYTES)
     while db.scalar(select(TrainingPlanShareLink).where(TrainingPlanShareLink.token == token)) is not None:
-        token = secrets.token_urlsafe(32)
+        token = secrets.token_urlsafe(SHARE_TOKEN_BYTES)
     link = TrainingPlanShareLink(
         training_plan_id=plan.id,
         token=token,

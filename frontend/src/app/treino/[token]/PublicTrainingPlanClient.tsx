@@ -133,31 +133,31 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
   const estimatedDuration = useMemo(() => estimateDurationMinutes(plan.exercises), [plan.exercises]);
 
   return (
-    <main className="min-h-screen bg-[#f5f7f5] text-[#202522]">
-      <article className="mx-auto min-h-screen max-w-[720px] bg-white sm:border-x sm:border-[#e3e7e3]">
-        <header className="flex items-center gap-3 border-b border-[#e3e7e3] px-4 py-4 sm:px-7">
+    <main className="min-h-screen bg-paper text-ink">
+      <article className="mx-auto min-h-screen max-w-[720px] bg-white sm:border-x sm:border-line">
+        <header className="flex items-center gap-3 border-b border-line px-4 py-4 sm:px-7">
           <img
             src={plan.academy_logo_url || "/logo.png"}
             alt={plan.academy_name}
-            className="h-10 w-10 border border-[#e3e7e3] bg-white object-cover"
+            className="h-10 w-10 border border-line bg-white object-cover"
           />
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-[#202522]">{plan.academy_name}</p>
-            <p className="mt-0.5 text-xs text-[#707772]">Ficha de treino</p>
+            <p className="truncate text-sm font-bold text-ink">{plan.academy_name}</p>
+            <p className="mt-0.5 text-xs text-muted">Ficha de treino</p>
           </div>
         </header>
 
         <section className="px-4 py-6 sm:px-7 sm:py-8">
-          <p className="text-xs font-semibold text-[#166534]">TREINO ATUAL</p>
-          <h1 className="mt-2 text-2xl font-bold leading-tight text-[#202522] sm:text-[28px]">{plan.plan_name}</h1>
-          <div className="mt-3 flex items-center gap-2 text-sm font-medium text-[#555d57]">
-            <UserRound className="h-4 w-4 text-[#166534]" strokeWidth={1.75} aria-hidden />
+          <p className="text-xs font-semibold text-brand">TREINO ATUAL</p>
+          <h1 className="mt-2 text-2xl font-bold leading-tight text-ink sm:text-[28px]">{plan.plan_name}</h1>
+          <div className="mt-3 flex items-center gap-2 text-sm font-medium text-ink/70">
+            <UserRound className="h-4 w-4 text-brand" strokeWidth={1.75} aria-hidden />
             <span>{plan.student_name}</span>
           </div>
 
-          {plan.objective ? <p className="mt-5 text-sm leading-6 text-[#626963]">{plan.objective}</p> : null}
+          {plan.objective ? <p className="mt-5 text-sm leading-6 text-ink/65">{plan.objective}</p> : null}
 
-          <div className="mt-5 grid gap-3 border-y border-[#e3e7e3] py-4 sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 border-y border-line py-4 sm:grid-cols-3">
             {estimatedDuration ? (
               <PreviewStat icon={<Clock3 className="h-4 w-4" strokeWidth={1.75} aria-hidden />} text={`${estimatedDuration} min`} />
             ) : null}
@@ -179,14 +179,14 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
             <div className="mt-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className={`text-sm font-semibold ${allDone ? "text-[#166534]" : "text-[#343a36]"}`}>
+                  <p className={`text-sm font-semibold ${allDone ? "text-ink" : "text-ink/80"}`}>
                     {allDone ? "Treino concluido. Bom descanso!" : "Progresso de hoje"}
                   </p>
-                  <p className="mt-0.5 text-xs text-[#7a817c]">{doneCount} de {total} exercicios concluidos</p>
+                  <p className="mt-0.5 text-xs text-muted">{doneCount} de {total} exercicios concluidos</p>
                 </div>
                 {doneCount > 0 ? (
                   <button
-                    className="flex h-9 w-9 shrink-0 items-center justify-center text-[#69716b] transition hover:text-[#166534] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#166534]"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center text-muted transition hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                     type="button"
                     onClick={resetProgress}
                     title="Recomecar treino"
@@ -197,7 +197,7 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
                 ) : null}
               </div>
               <div
-                className="mt-3 h-1.5 w-full overflow-hidden bg-[#e7ebe7]"
+                className="mt-3 h-1.5 w-full overflow-hidden bg-line"
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={total}
@@ -205,7 +205,7 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
                 aria-label="Progresso do treino de hoje"
               >
                 <div
-                  className="h-full bg-[#166534] transition-all duration-300"
+                  className="h-full bg-brand transition-all duration-300"
                   style={{ width: `${total ? (doneCount / total) * 100 : 0}%` }}
                 />
               </div>
@@ -213,14 +213,14 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
           ) : null}
         </section>
 
-        <section className="border-t border-[#e3e7e3] px-4 pb-8 pt-6 sm:px-7">
+        <section className="border-t border-line px-4 pb-8 pt-6 sm:px-7">
           <div className="mb-2">
-            <h2 className="text-lg font-bold text-[#202522]">Exercicios</h2>
-            <p className="mt-1 text-sm text-[#707772]">Marque cada exercicio conforme concluir.</p>
+            <h2 className="text-lg font-bold text-ink">Exercicios</h2>
+            <p className="mt-1 text-sm text-muted">Marque cada exercicio conforme concluir.</p>
           </div>
 
           {total === 0 ? (
-            <div className="mt-5 border border-dashed border-[#cfd5d0] px-4 py-10 text-center text-sm text-[#707772]">
+            <div className="mt-5 border border-dashed border-line px-4 py-10 text-center text-sm text-muted">
               Esta ficha ainda nao tem exercicios cadastrados.
             </div>
           ) : (
@@ -228,18 +228,18 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
               {sections.map((section) => {
                 const groupDone = section.entries.filter((entry) => done.has(entry.key)).length;
                 return (
-                  <section key={section.group} className="mt-6 border-t-2 border-[#166534] pt-4">
+                  <section key={section.group} className="mt-6 border-t-2 border-brand pt-4">
                     <header className="flex items-center justify-between gap-3 pb-3">
-                      <div className="flex items-center gap-2 text-[#166534]">
+                      <div className="flex items-center gap-2 text-brand">
                         <Dumbbell className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-                        <h2 className="text-sm font-bold text-[#27302a]">{section.group}</h2>
+                        <h2 className="text-sm font-bold text-ink">{section.group}</h2>
                       </div>
-                      <span className="text-xs font-medium text-[#707772]">
+                      <span className="text-xs font-medium text-muted">
                         {groupDone}/{section.entries.length}
                       </span>
                     </header>
 
-                    <div className="divide-y divide-[#e6e9e6] border-y border-[#e6e9e6]">
+                    <div className="divide-y divide-line border-y border-line">
                       {section.entries.map((entry) => (
                         <ExerciseCard
                           key={entry.key}
@@ -256,7 +256,7 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
           )}
 
           {plan.notes ? (
-            <div className="mt-7 border-l-4 border-[#b7791f] bg-[#fffbeb] px-4 py-3 text-sm text-[#704b16]">
+            <div className="mt-7 border-l-4 border-brand bg-brand-soft px-4 py-3 text-sm text-brand-deep">
               <div className="flex items-start gap-2.5">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
                 <div>
@@ -268,7 +268,7 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
           ) : null}
         </section>
 
-        <footer className="border-t border-[#e3e7e3] px-4 py-5 text-center text-xs text-[#858c87] sm:px-7">
+        <footer className="border-t border-line px-4 py-5 text-center text-xs text-muted sm:px-7">
           {plan.academy_name}
         </footer>
       </article>
@@ -278,8 +278,8 @@ export function PublicTrainingPlanClient({ plan, token }: { plan: PublicTraining
 
 function PreviewStat({ icon, text }: { icon: ReactNode; text: string }) {
   return (
-    <span className="inline-flex items-center gap-2 text-xs font-medium text-[#5d655f]">
-      <span className="text-[#166534]">{icon}</span>
+    <span className="inline-flex items-center gap-2 text-xs font-medium text-ink/65">
+      <span className="text-brand">{icon}</span>
       {text}
     </span>
   );
@@ -299,16 +299,16 @@ function ExerciseCard({
 
   return (
     <article
-      className={`py-4 transition ${isDone ? "bg-[#f4f8f5]" : "bg-white"}`}
+      className={`py-4 transition ${isDone ? "bg-brand-soft/50" : "bg-white"}`}
     >
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center text-xs font-bold text-[#166534]">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center text-xs font-bold text-brand">
           {isDone ? <Check className="h-4 w-4" strokeWidth={2} aria-hidden /> : String(number).padStart(2, "0")}
         </span>
 
         <div className={`min-w-0 flex-1 ${isDone ? "opacity-60" : ""}`}>
-          <h3 className="text-sm font-semibold leading-tight text-[#252b27]">{exercise.name}</h3>
-          {metrics.length > 0 ? <p className="mt-1.5 text-xs text-[#69716b]">{metrics.join(" · ")}</p> : null}
+          <h3 className="text-sm font-semibold leading-tight text-ink">{exercise.name}</h3>
+          {metrics.length > 0 ? <p className="mt-1.5 text-xs text-muted">{metrics.join(" · ")}</p> : null}
 
           {exercise.media.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -320,20 +320,20 @@ function ExerciseCard({
 
           {exercise.notes ? (
             <details className="group mt-2">
-              <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-[#69716b] hover:text-[#166534]">
+              <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted hover:text-brand">
                 <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" strokeWidth={1.75} aria-hidden />
                 Observacao
               </summary>
-              <p className="mt-2 border-l-2 border-[#a7b9aa] pl-3 text-xs leading-5 text-[#59605b]">{exercise.notes}</p>
+              <p className="mt-2 border-l-2 border-brand-200 pl-3 text-xs leading-5 text-ink/65">{exercise.notes}</p>
             </details>
           ) : null}
         </div>
 
         <button
-          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#166534] focus-visible:ring-offset-2 ${
+          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
             isDone
-              ? "border-[#166534] bg-[#166534] text-white"
-              : "border-[#aab2ac] bg-white text-transparent hover:border-[#166534] hover:text-[#166534]/30"
+              ? "border-brand bg-brand text-white"
+              : "border-line bg-white text-transparent hover:border-brand hover:text-brand/30"
           }`}
           type="button"
           aria-pressed={isDone}
@@ -354,7 +354,7 @@ function MediaChip({ media }: { media: PublicTrainingPlanMedia }) {
   const Icon = isVideo ? PlayCircle : ImageIcon;
   return (
     <a
-      className="inline-flex items-center gap-1.5 border-b border-[#86a38d] py-0.5 text-xs font-semibold text-[#166534] transition hover:border-[#166534]"
+      className="inline-flex items-center gap-1.5 border-b border-brand-200 py-0.5 text-xs font-semibold text-brand transition hover:border-brand"
       href={source}
       target="_blank"
       rel="noreferrer"

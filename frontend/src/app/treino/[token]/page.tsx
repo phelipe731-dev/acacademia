@@ -25,13 +25,13 @@ export default async function PublicTrainingPlanPage({ params }: { params: Promi
 
   if (!plan) {
     return (
-      <main className="min-h-screen bg-[#f5f7f5] px-4 py-8 text-[#202522]">
-        <div className="mx-auto max-w-md border border-[#e3e7e3] bg-white p-6 text-center">
+      <main className="min-h-screen bg-paper px-4 py-8 text-ink">
+        <div className="mx-auto max-w-md border border-line bg-white p-6 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center text-danger">
             <AlertCircle className="h-6 w-6" strokeWidth={1.75} aria-hidden />
           </div>
           <h1 className="mt-3 text-xl font-bold">Ficha indisponivel</h1>
-          <p className="mt-2 text-sm leading-6 text-[#69716b]">
+          <p className="mt-2 text-sm leading-6 text-muted">
             Este link de treino esta invalido, expirado ou foi revogado.
           </p>
         </div>

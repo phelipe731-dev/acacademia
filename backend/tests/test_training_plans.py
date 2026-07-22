@@ -85,7 +85,8 @@ def test_training_plan_public_link_media_and_revoke(client: TestClient) -> None:
     assert link.status_code == 200, link.text
     token = link.json()["token"]
     assert token not in str(plan["id"])
-    assert "/treino/" in link.json()["public_url"]
+    assert len(token) == 12
+    assert f"/t/{token}" in link.json()["public_url"]
 
     public = client.get(f"/public/training-plans/{token}")
     assert public.status_code == 200, public.text
