@@ -1,1 +1,5 @@
-export { default, dynamic } from "../../treino/[token]/page";
+import PublicTrainingPlanPage from "../../treino/[token]/page";
+
+export const dynamic = "force-dynamic";
+
+export default PublicTrainingPlanPage;
