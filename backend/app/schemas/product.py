@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.enums import ProductStatus
 
@@ -30,9 +30,22 @@ class ProductUpdate(BaseModel):
     category: str | None = Field(default=None, max_length=120)
     cost_price: Decimal | None = Field(default=None, ge=0)
     sale_price: Decimal | None = Field(default=None, gt=0)
-    stock_quantity: int | None = Field(default=None, ge=0)
     min_stock: int | None = Field(default=None, ge=0)
     status: ProductStatus | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("cost_price", "sale_price")
+    @classmethod
+    def money_scale(cls, value: Decimal | None) -> Decimal | None:
+        return value.quantize(Decimal("0.01")) if value is not None else None
+
+    @model_validator(mode="after")
+    def required_fields_cannot_be_cleared(self) -> "ProductUpdate":
+        for field in ("name", "sale_price", "min_stock", "status"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} nao pode ser nulo.")
+        return self
 
 
 class ProductRead(ProductBase):

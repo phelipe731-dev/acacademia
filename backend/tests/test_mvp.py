@@ -63,6 +63,41 @@ def test_create_product_and_stock_entry(client: TestClient) -> None:
     assert updated.json()["stock_quantity"] == 5
 
 
+def test_admin_can_edit_product_without_bypassing_stock_history(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    product = create_product(client, headers, stock=4)
+
+    response = client.patch(
+        f"/products/{product['id']}",
+        headers=headers,
+        json={
+            "name": "Whey Protein Premium",
+            "category": "Proteinas",
+            "cost_price": 82.346,
+            "sale_price": 149.9,
+            "min_stock": 3,
+            "status": "INATIVO",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == "Whey Protein Premium"
+    assert response.json()["category"] == "Proteinas"
+    assert response.json()["cost_price"] == "82.35"
+    assert response.json()["sale_price"] == "149.90"
+    assert response.json()["min_stock"] == 3
+    assert response.json()["status"] == "INATIVO"
+    assert response.json()["stock_quantity"] == 4
+
+    stock_bypass = client.patch(
+        f"/products/{product['id']}",
+        headers=headers,
+        json={"stock_quantity": 99},
+    )
+    assert stock_bypass.status_code == 422
+    assert client.get(f"/products/{product['id']}", headers=headers).json()["stock_quantity"] == 4
+
+
 def test_sale_decrements_stock_and_creates_movement(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     product = create_product(client, headers, stock=5)
@@ -130,6 +165,12 @@ def test_basic_admin_vs_reception_permissions(client: TestClient) -> None:
             "min_stock": 1,
             "status": "ATIVO",
         },
+    ).status_code == 403
+    product = create_product(client, admin_headers)
+    assert client.patch(
+        f"/products/{product['id']}",
+        headers=reception_headers,
+        json={"name": "Creatina editada"},
     ).status_code == 403
 
 
