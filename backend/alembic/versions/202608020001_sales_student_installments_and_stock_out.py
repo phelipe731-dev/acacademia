@@ -28,10 +28,14 @@ sale_installment_payment_method = sa.Enum(
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        op.execute(sa.text("DROP TABLE IF EXISTS _alembic_tmp_sales"))
+
     with op.batch_alter_table("sales") as batch_op:
         batch_op.add_column(sa.Column("student_id", sa.Integer(), nullable=True))
         batch_op.add_column(
-            sa.Column("installments_count", sa.Integer(), server_default="1", nullable=False)
+            sa.Column("installments_count", sa.Integer(), server_default="1", nullable=True)
         )
         batch_op.add_column(sa.Column("installment_payment_method", sale_installment_payment_method, nullable=True))
         batch_op.create_foreign_key(
@@ -41,7 +45,11 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-        batch_op.alter_column("installments_count", server_default=None)
+
+    op.execute(sa.text("UPDATE sales SET installments_count = 1 WHERE installments_count IS NULL"))
+
+    with op.batch_alter_table("sales") as batch_op:
+        batch_op.alter_column("installments_count", existing_type=sa.Integer(), nullable=False, server_default=None)
     op.create_index(op.f("ix_sales_student_id"), "sales", ["student_id"], unique=False)
 
 
