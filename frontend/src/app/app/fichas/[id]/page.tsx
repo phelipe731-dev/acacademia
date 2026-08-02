@@ -11,6 +11,7 @@ import {
   ImageIcon,
   ImagePlus,
   Link2,
+  Minus,
   Pencil,
   PlayCircle,
   Plus,
@@ -46,6 +47,51 @@ const mediaLabels: Record<TrainingMediaType, string> = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const planFormId = "training-plan-form";
+const CUSTOM_OPTION = "__CUSTOM__";
+const CUSTOM_LABEL = "Personalizado";
+
+const trainingPresets = [
+  {
+    group: "Peito",
+    exercises: ["Supino reto", "Supino inclinado", "Supino declinado", "Crucifixo", "Crossover", "Flexao"]
+  },
+  {
+    group: "Costas",
+    exercises: ["Puxada frente", "Remada baixa", "Remada curvada", "Pulldown", "Barra fixa", "Levantamento terra"]
+  },
+  {
+    group: "Pernas",
+    exercises: ["Agachamento livre", "Leg press", "Cadeira extensora", "Mesa flexora", "Stiff", "Panturrilha"]
+  },
+  {
+    group: "Ombros",
+    exercises: ["Desenvolvimento", "Elevacao lateral", "Elevacao frontal", "Remada alta", "Crucifixo inverso"]
+  },
+  {
+    group: "Biceps",
+    exercises: ["Rosca direta", "Rosca alternada", "Rosca martelo", "Rosca Scott", "Rosca concentrada"]
+  },
+  {
+    group: "Triceps",
+    exercises: ["Triceps pulley", "Triceps testa", "Triceps corda", "Paralela", "Triceps frances"]
+  },
+  {
+    group: "Abdomen",
+    exercises: ["Abdominal supra", "Abdominal infra", "Prancha", "Abdominal obliquo", "Abdominal maquina"]
+  },
+  {
+    group: "Gluteos",
+    exercises: ["Elevacao pelvica", "Cadeira abdutora", "Coice no cabo", "Avanco", "Agachamento sumo"]
+  },
+  {
+    group: "Cardio",
+    exercises: ["Esteira", "Bicicleta", "Eliptico", "Escada", "HIIT"]
+  },
+  {
+    group: "Mobilidade",
+    exercises: ["Alongamento dinamico", "Mobilidade de quadril", "Mobilidade toracica", "Liberacao miofascial"]
+  }
+];
 
 function mediaUrl(url?: string | null) {
   if (!url) return "#";
@@ -137,6 +183,25 @@ function parseFirstNumber(value?: string | number | null): number | null {
   if (!value) return null;
   const match = String(value).match(/\d+/);
   return match ? Number(match[0]) : null;
+}
+
+function clamp(value: number, min: number, max?: number): number {
+  const next = Math.max(value, min);
+  return typeof max === "number" ? Math.min(next, max) : next;
+}
+
+function withSuffix(value: number, suffix?: string): string {
+  return suffix ? `${value}${suffix}` : String(value);
+}
+
+function groupSelectValue(group?: string | null): string {
+  if (!group) return "";
+  return trainingPresets.some((preset) => preset.group === group) ? group : CUSTOM_OPTION;
+}
+
+function exerciseSelectValue(name: string, exercises: string[]): string {
+  if (!name) return "";
+  return exercises.includes(name) ? name : CUSTOM_OPTION;
 }
 
 function estimateDurationMinutes(exercises: TrainingPlanExercise[]): number | null {
@@ -697,94 +762,11 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
               </div>
 
               <form onSubmit={createExercise} className="mt-5 space-y-3">
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr),minmax(0,0.9fr),110px]">
-                  <div>
-                    <label className="label" htmlFor="exercise-name">Exercicio</label>
-                    <input
-                      id="exercise-name"
-                      className="field"
-                      required
-                      value={exerciseForm.name}
-                      onChange={(event) => setExerciseForm({ ...exerciseForm, name: event.target.value })}
-                      placeholder="Supino reto com barra"
-                    />
-                  </div>
-                  <div>
-                    <label className="label" htmlFor="exercise-group">Grupo muscular</label>
-                    <input
-                      id="exercise-group"
-                      className="field"
-                      value={exerciseForm.muscle_group}
-                      onChange={(event) => setExerciseForm({ ...exerciseForm, muscle_group: event.target.value })}
-                      placeholder="Peito, Costas, Pernas..."
-                    />
-                  </div>
-                  <div>
-                    <label className="label" htmlFor="exercise-order">Ordem</label>
-                    <input
-                      id="exercise-order"
-                      className="field"
-                      type="number"
-                      min="0"
-                      value={exerciseForm.sort_order}
-                      onChange={(event) => setExerciseForm({ ...exerciseForm, sort_order: event.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4">
-                  <div>
-                    <label className="label" htmlFor="exercise-sets">Series</label>
-                    <input
-                      id="exercise-sets"
-                      className="field"
-                      placeholder="4"
-                      value={exerciseForm.sets}
-                      onChange={(event) => setExerciseForm({ ...exerciseForm, sets: event.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="label" htmlFor="exercise-repetitions">Repeticoes</label>
-                    <input
-                      id="exercise-repetitions"
-                      className="field"
-                      placeholder="10 a 12"
-                      value={exerciseForm.repetitions}
-                      onChange={(event) => setExerciseForm({ ...exerciseForm, repetitions: event.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="label" htmlFor="exercise-load">Carga</label>
-                    <input
-                      id="exercise-load"
-                      className="field"
-                      placeholder="Moderada"
-                      value={exerciseForm.load}
-                      onChange={(event) => setExerciseForm({ ...exerciseForm, load: event.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="label" htmlFor="exercise-rest">Descanso</label>
-                    <input
-                      id="exercise-rest"
-                      className="field"
-                      placeholder="60s"
-                      value={exerciseForm.rest}
-                      onChange={(event) => setExerciseForm({ ...exerciseForm, rest: event.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="exercise-notes">Observacao curta</label>
-                  <input
-                    id="exercise-notes"
-                    className="field"
-                    placeholder="Execucao, postura, amplitude, respiracao..."
-                    value={exerciseForm.notes}
-                    onChange={(event) => setExerciseForm({ ...exerciseForm, notes: event.target.value })}
-                  />
-                </div>
+                <ExercisePresetFields
+                  draft={exerciseForm}
+                  idPrefix="exercise"
+                  onChange={(updates) => setExerciseForm((current) => ({ ...current, ...updates }))}
+                />
 
                 <button className="btn-primary w-full" type="submit" disabled={creatingExercise}>
                   <Plus className="h-4 w-4" aria-hidden />
@@ -844,98 +826,26 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
                                   <X className="h-4 w-4" aria-hidden />
                                 </button>
                               </div>
-                              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr),minmax(0,0.9fr),110px,140px]">
-                                <div>
-                                  <label className="label" htmlFor={`edit-exercise-name-${exercise.id}`}>Exercicio</label>
-                                  <input
-                                    id={`edit-exercise-name-${exercise.id}`}
-                                    className="field"
-                                    required
-                                    value={editingExerciseForm.name}
-                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, name: event.target.value })}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="label" htmlFor={`edit-exercise-group-${exercise.id}`}>Grupo</label>
-                                  <input
-                                    id={`edit-exercise-group-${exercise.id}`}
-                                    className="field"
-                                    value={editingExerciseForm.muscle_group}
-                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, muscle_group: event.target.value })}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="label" htmlFor={`edit-exercise-order-${exercise.id}`}>Ordem</label>
-                                  <input
-                                    id={`edit-exercise-order-${exercise.id}`}
-                                    className="field"
-                                    type="number"
-                                    min="0"
-                                    value={editingExerciseForm.sort_order}
-                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, sort_order: event.target.value })}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="label" htmlFor={`edit-exercise-status-${exercise.id}`}>Status</label>
-                                  <select
-                                    id={`edit-exercise-status-${exercise.id}`}
-                                    className="field"
-                                    value={editingExerciseForm.is_active ? "ATIVO" : "INATIVO"}
-                                    onChange={(event) =>
-                                      setEditingExerciseForm({ ...editingExerciseForm, is_active: event.target.value === "ATIVO" })
-                                    }
-                                  >
-                                    <option value="ATIVO">Ativo</option>
-                                    <option value="INATIVO">Inativo</option>
-                                  </select>
-                                </div>
-                              </div>
-                              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                <div>
-                                  <label className="label" htmlFor={`edit-exercise-sets-${exercise.id}`}>Series</label>
-                                  <input
-                                    id={`edit-exercise-sets-${exercise.id}`}
-                                    className="field"
-                                    value={editingExerciseForm.sets}
-                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, sets: event.target.value })}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="label" htmlFor={`edit-exercise-reps-${exercise.id}`}>Repeticoes</label>
-                                  <input
-                                    id={`edit-exercise-reps-${exercise.id}`}
-                                    className="field"
-                                    value={editingExerciseForm.repetitions}
-                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, repetitions: event.target.value })}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="label" htmlFor={`edit-exercise-load-${exercise.id}`}>Carga</label>
-                                  <input
-                                    id={`edit-exercise-load-${exercise.id}`}
-                                    className="field"
-                                    value={editingExerciseForm.load}
-                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, load: event.target.value })}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="label" htmlFor={`edit-exercise-rest-${exercise.id}`}>Descanso</label>
-                                  <input
-                                    id={`edit-exercise-rest-${exercise.id}`}
-                                    className="field"
-                                    value={editingExerciseForm.rest}
-                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, rest: event.target.value })}
-                                  />
-                                </div>
-                              </div>
+                              <ExercisePresetFields
+                                draft={editingExerciseForm}
+                                idPrefix={`edit-exercise-${exercise.id}`}
+                                onChange={(updates) =>
+                                  setEditingExerciseForm((current) => ({ ...current, ...updates }))
+                                }
+                              />
                               <div>
-                                <label className="label" htmlFor={`edit-exercise-notes-${exercise.id}`}>Observacao</label>
-                                <input
-                                  id={`edit-exercise-notes-${exercise.id}`}
+                                <label className="label" htmlFor={`edit-exercise-status-${exercise.id}`}>Status</label>
+                                <select
+                                  id={`edit-exercise-status-${exercise.id}`}
                                   className="field"
-                                  value={editingExerciseForm.notes}
-                                  onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, notes: event.target.value })}
-                                />
+                                  value={editingExerciseForm.is_active ? "ATIVO" : "INATIVO"}
+                                  onChange={(event) =>
+                                    setEditingExerciseForm({ ...editingExerciseForm, is_active: event.target.value === "ATIVO" })
+                                  }
+                                >
+                                  <option value="ATIVO">Ativo</option>
+                                  <option value="INATIVO">Inativo</option>
+                                </select>
                               </div>
                               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                                 <button
@@ -1267,6 +1177,248 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
             estimatedDuration={estimatedDuration}
           />
         </aside>
+      </div>
+    </div>
+  );
+}
+
+function ExercisePresetFields({
+  draft,
+  idPrefix,
+  onChange
+}: {
+  draft: ExerciseDraft;
+  idPrefix: string;
+  onChange: (updates: Partial<ExerciseDraft>) => void;
+}) {
+  const selectedGroup = trainingPresets.find((preset) => preset.group === draft.muscle_group);
+  const groupValue = groupSelectValue(draft.muscle_group);
+  const availableExercises = selectedGroup?.exercises ?? [];
+  const selectedExerciseValue = selectedGroup ? exerciseSelectValue(draft.name, availableExercises) : "";
+  const showCustomGroup = groupValue === CUSTOM_OPTION;
+  const showCustomExercise = !selectedGroup || selectedExerciseValue === CUSTOM_OPTION;
+
+  function updateGroup(value: string) {
+    if (!value) {
+      onChange({ muscle_group: "", name: "" });
+      return;
+    }
+    if (value === CUSTOM_OPTION) {
+      onChange({ muscle_group: CUSTOM_LABEL, name: "" });
+      return;
+    }
+    const nextGroup = trainingPresets.find((preset) => preset.group === value);
+    onChange({
+      muscle_group: value,
+      name: nextGroup?.exercises.includes(draft.name) ? draft.name : ""
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,0.95fr),minmax(0,1.25fr),140px]">
+        <div>
+          <label className="label" htmlFor={`${idPrefix}-group`}>Grupo muscular</label>
+          <select
+            id={`${idPrefix}-group`}
+            className="field"
+            required
+            value={groupValue}
+            onChange={(event) => updateGroup(event.target.value)}
+          >
+            <option value="">Selecione</option>
+            {trainingPresets.map((preset) => (
+              <option key={preset.group} value={preset.group}>{preset.group}</option>
+            ))}
+            <option value={CUSTOM_OPTION}>Personalizado</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="label" htmlFor={`${idPrefix}-exercise-select`}>Exercicio</label>
+          <select
+            id={`${idPrefix}-exercise-select`}
+            className="field"
+            required={!showCustomExercise}
+            disabled={!selectedGroup}
+            value={selectedExerciseValue}
+            onChange={(event) => {
+              const value = event.target.value;
+              onChange({ name: value === CUSTOM_OPTION ? CUSTOM_LABEL : value });
+            }}
+          >
+            <option value="">{selectedGroup ? "Selecione" : "Selecione um grupo primeiro"}</option>
+            {availableExercises.map((exercise) => (
+              <option key={exercise} value={exercise}>{exercise}</option>
+            ))}
+            {selectedGroup ? <option value={CUSTOM_OPTION}>Outro exercicio</option> : null}
+          </select>
+        </div>
+
+        <NumberStepper
+          id={`${idPrefix}-order`}
+          label="Ordem"
+          min={0}
+          step={1}
+          value={draft.sort_order}
+          onChange={(value) => onChange({ sort_order: value })}
+        />
+      </div>
+
+      {showCustomGroup ? (
+        <div>
+          <label className="label" htmlFor={`${idPrefix}-custom-group`}>Grupo personalizado</label>
+          <input
+            id={`${idPrefix}-custom-group`}
+            className="field"
+            required
+            placeholder="Ex.: Funcional"
+            value={draft.muscle_group}
+            onChange={(event) => onChange({ muscle_group: event.target.value })}
+          />
+        </div>
+      ) : null}
+
+      {showCustomExercise ? (
+        <div>
+          <label className="label" htmlFor={`${idPrefix}-custom-name`}>Nome do exercicio</label>
+          <input
+            id={`${idPrefix}-custom-name`}
+            className="field"
+            required
+            placeholder="Digite o exercicio"
+            value={draft.name}
+            onChange={(event) => onChange({ name: event.target.value })}
+          />
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <NumberStepper
+          id={`${idPrefix}-sets`}
+          label="Series"
+          min={1}
+          step={1}
+          value={draft.sets}
+          onChange={(value) => onChange({ sets: value })}
+        />
+        <NumberStepper
+          id={`${idPrefix}-repetitions`}
+          label="Repeticoes"
+          min={1}
+          step={1}
+          value={draft.repetitions}
+          onChange={(value) => onChange({ repetitions: value })}
+        />
+        <NumberStepper
+          id={`${idPrefix}-load`}
+          label="Carga"
+          min={0}
+          step={1}
+          suffix="kg"
+          value={draft.load}
+          onChange={(value) => onChange({ load: value })}
+        />
+        <NumberStepper
+          id={`${idPrefix}-rest`}
+          label="Descanso"
+          min={0}
+          step={15}
+          suffix="s"
+          value={draft.rest}
+          onChange={(value) => onChange({ rest: value })}
+        />
+      </div>
+
+      <div>
+        <label className="label" htmlFor={`${idPrefix}-notes`}>Observacao curta</label>
+        <input
+          id={`${idPrefix}-notes`}
+          className="field"
+          placeholder="Execucao, postura, amplitude, respiracao..."
+          value={draft.notes}
+          onChange={(event) => onChange({ notes: event.target.value })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function NumberStepper({
+  id,
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  suffix
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  min: number;
+  max?: number;
+  step: number;
+  suffix?: string;
+}) {
+  const currentNumber = parseFirstNumber(value);
+
+  function setNumber(next: number) {
+    onChange(withSuffix(clamp(next, min, max), suffix));
+  }
+
+  function adjust(delta: number) {
+    setNumber((currentNumber ?? min) + delta);
+  }
+
+  return (
+    <div>
+      <label className="label" htmlFor={id}>{label}</label>
+      <div className="grid grid-cols-[42px_1fr_42px] overflow-hidden rounded-lg border border-line bg-surface">
+        <button
+          className="flex h-[42px] items-center justify-center border-r border-line text-ink/70 transition hover:bg-paper"
+          type="button"
+          aria-label={`Diminuir ${label}`}
+          title={`Diminuir ${label}`}
+          onClick={() => adjust(-step)}
+        >
+          <Minus className="h-4 w-4" aria-hidden />
+        </button>
+        <div className="relative">
+          <input
+            id={id}
+            className="h-[42px] w-full border-0 bg-transparent px-3 text-center text-sm font-semibold text-ink outline-none"
+            type="number"
+            inputMode="numeric"
+            min={min}
+            max={max}
+            step={step}
+            value={currentNumber ?? ""}
+            onChange={(event) => {
+              if (!event.target.value) {
+                onChange("");
+                return;
+              }
+              setNumber(Number(event.target.value));
+            }}
+          />
+          {suffix ? (
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-ink/40">
+              {suffix}
+            </span>
+          ) : null}
+        </div>
+        <button
+          className="flex h-[42px] items-center justify-center border-l border-line text-ink/70 transition hover:bg-paper"
+          type="button"
+          aria-label={`Aumentar ${label}`}
+          title={`Aumentar ${label}`}
+          onClick={() => adjust(step)}
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+        </button>
       </div>
     </div>
   );
