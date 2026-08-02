@@ -25,9 +25,12 @@ class SaleReportRow(BaseModel):
     id: int
     created_at: datetime
     payment_method: str
+    student_name: str | None
     total_amount: Decimal
     user_name: str | None
     items_count: int
+    installments_count: int
+    installment_payment_method: str | None = None
 
 
 class TopProductReportRow(BaseModel):

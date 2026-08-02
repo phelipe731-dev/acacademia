@@ -2,8 +2,9 @@ export type UserRole = "ADMIN" | "RECEPCAO" | "PROFESSOR";
 export type StudentStatus = "ATIVO" | "INATIVO" | "INADIMPLENTE";
 export type PaymentStatus = "PENDENTE" | "PAGO" | "ATRASADO" | "CANCELADO";
 export type PaymentMethod = "DINHEIRO" | "PIX" | "CARTAO" | "OUTRO";
+export type SalePaymentMethod = PaymentMethod | "PRAZO";
 export type ProductStatus = "ATIVO" | "INATIVO";
-export type StockMovementType = "ENTRADA" | "SAIDA_VENDA" | "AJUSTE";
+export type StockMovementType = "ENTRADA" | "SAIDA" | "SAIDA_VENDA" | "AJUSTE";
 export type TrainingMediaType = "IMAGE" | "VIDEO" | "EXTERNAL_IMAGE" | "EXTERNAL_VIDEO";
 
 export interface User {
@@ -124,12 +125,16 @@ export interface SaleItem {
 
 export interface Sale {
   id: number;
-  payment_method: PaymentMethod;
+  student_id?: number | null;
+  payment_method: SalePaymentMethod;
+  installments_count: number;
+  installment_payment_method?: PaymentMethod | null;
   total_amount: string;
   notes?: string | null;
   created_by_id?: number | null;
   created_at: string;
   items: SaleItem[];
+  student?: Student | null;
   created_by?: User | null;
 }
 
@@ -180,9 +185,12 @@ export interface SaleReportRow {
   id: number;
   created_at: string;
   payment_method: string;
+  student_name?: string | null;
   total_amount: string;
   user_name?: string | null;
   items_count: number;
+  installments_count: number;
+  installment_payment_method?: string | null;
 }
 
 export interface RevenueReport {

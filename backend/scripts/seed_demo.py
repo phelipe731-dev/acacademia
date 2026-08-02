@@ -17,7 +17,15 @@ from app.core.config import settings
 from app.core.tz import business_today
 from app.db.session import SessionLocal
 from app.models.checkin import CheckIn
-from app.models.enums import PaymentMethod, PaymentStatus, ProductStatus, StockMovementType, StudentStatus, UserRole
+from app.models.enums import (
+    PaymentMethod,
+    PaymentStatus,
+    ProductStatus,
+    SalePaymentMethod,
+    StockMovementType,
+    StudentStatus,
+    UserRole,
+)
 from app.models.payment import Payment
 from app.models.product import Product
 from app.models.sale import Sale
@@ -268,24 +276,36 @@ def upsert_products(db: Session, admin: User) -> list[Product]:
     return products
 
 
-def seed_sales(db: Session, products: list[Product], admin: User) -> None:
+def seed_sales(db: Session, products: list[Product], students: list[Student], admin: User) -> None:
     by_name = {product.name: product for product in products}
     sales = [
-        ("venda balcao 1", PaymentMethod.PIX, [("Whey Protein Chocolate 900g", 1), ("Coqueteleira AC 600ml", 1)]),
-        ("venda balcao 2", PaymentMethod.CARTAO, [("Creatina Monohidratada 300g", 2), ("Barra Proteica Cookies", 3)]),
-        ("venda balcao 3", PaymentMethod.DINHEIRO, [("Agua Mineral 500ml", 6), ("Barra Proteica Cookies", 2)]),
-        ("venda balcao 4", PaymentMethod.PIX, [("Pre Treino Nitro 250g", 1), ("BCAA Zero Acucar", 1)]),
-        ("venda balcao 5", PaymentMethod.CARTAO, [("Creatina Monohidratada 300g", 1), ("Agua Mineral 500ml", 4)]),
+        ("venda balcao 1", SalePaymentMethod.PIX, 1, None, [("Whey Protein Chocolate 900g", 1), ("Coqueteleira AC 600ml", 1)]),
+        ("venda balcao 2", SalePaymentMethod.CARTAO, 1, None, [("Creatina Monohidratada 300g", 2), ("Barra Proteica Cookies", 3)]),
+        ("venda balcao 3", SalePaymentMethod.DINHEIRO, 1, None, [("Agua Mineral 500ml", 6), ("Barra Proteica Cookies", 2)]),
+        ("venda balcao 4 a prazo", SalePaymentMethod.PRAZO, 3, PaymentMethod.PIX, [("Pre Treino Nitro 250g", 1), ("BCAA Zero Acucar", 1)]),
+        ("venda balcao 5", SalePaymentMethod.CARTAO, 1, None, [("Creatina Monohidratada 300g", 1), ("Agua Mineral 500ml", 4)]),
     ]
-    for index, (label, method, items) in enumerate(sales):
+    for index, (label, method, installments, installment_method, items) in enumerate(sales):
         note = f"{DEMO_TAG} - {label}"
-        if db.scalar(select(Sale.id).where(Sale.notes == note)):
+        existing = db.scalar(select(Sale).where(Sale.notes == note))
+        if existing:
+            if existing.student_id is None:
+                existing.student_id = students[index % len(students)].id
+            continue
+        student = students[index % len(students)]
+        sale_notes = note
+        if method == SalePaymentMethod.PRAZO:
+            sale_notes = f"{note} - {installments}x via {installment_method.value if installment_method else 'OUTRO'}"
+        if db.scalar(select(Sale.id).where(Sale.notes == sale_notes)):
             continue
         sale = create_sale_with_stock(
             db,
             SaleCreate(
+                student_id=student.id,
                 payment_method=method,
-                notes=note,
+                installments_count=installments,
+                installment_payment_method=installment_method,
+                notes=sale_notes,
                 items=[
                     SaleItemCreate(product_id=by_name[product_name].id, quantity=quantity)
                     for product_name, quantity in items
@@ -363,7 +383,7 @@ def main() -> None:
         students = upsert_students(db)
         seed_payments(db, students, admin)
         products = upsert_products(db, admin)
-        seed_sales(db, products, admin)
+        seed_sales(db, products, students, admin)
         seed_checkins(db, students, admin)
         summary = count_demo(db)
 

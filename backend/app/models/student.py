@@ -38,5 +38,6 @@ class Student(Base):
     )
 
     payments = relationship("Payment", back_populates="student", cascade="all, delete-orphan")
+    sales = relationship("Sale", back_populates="student")
     checkins = relationship("CheckIn", back_populates="student", cascade="all, delete-orphan")
     training_plans = relationship("TrainingPlan", back_populates="student", cascade="all, delete-orphan")

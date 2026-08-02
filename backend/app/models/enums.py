@@ -27,6 +27,14 @@ class PaymentMethod(str, Enum):
     OUTRO = "OUTRO"
 
 
+class SalePaymentMethod(str, Enum):
+    DINHEIRO = "DINHEIRO"
+    PIX = "PIX"
+    CARTAO = "CARTAO"
+    OUTRO = "OUTRO"
+    PRAZO = "PRAZO"
+
+
 class ProductStatus(str, Enum):
     ATIVO = "ATIVO"
     INATIVO = "INATIVO"
@@ -34,6 +42,7 @@ class ProductStatus(str, Enum):
 
 class StockMovementType(str, Enum):
     ENTRADA = "ENTRADA"
+    SAIDA = "SAIDA"
     SAIDA_VENDA = "SAIDA_VENDA"
     AJUSTE = "AJUSTE"
 

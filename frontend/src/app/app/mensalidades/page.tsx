@@ -45,6 +45,18 @@ export default function PaymentsPage() {
     notes: ""
   });
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const selectedStudentId = params.get("student_id");
+    const amount = params.get("amount");
+    if (!selectedStudentId && !amount) return;
+    setForm((current) => ({
+      ...current,
+      student_id: selectedStudentId || current.student_id,
+      amount: amount || current.amount
+    }));
+  }, []);
+
   async function load() {
     const params = new URLSearchParams();
     if (status) params.set("status", status);

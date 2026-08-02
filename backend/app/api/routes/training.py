@@ -24,6 +24,7 @@ from app.schemas.training import (
     PublicTrainingPlanMedia,
     PublicTrainingPlanRead,
     TrainingPlanCreate,
+    TrainingPlanCloneCreate,
     TrainingPlanExerciseCreate,
     TrainingPlanExerciseMediaRead,
     TrainingPlanExerciseMediaUpdate,
@@ -261,6 +262,80 @@ def update_training_plan(
     )
     db.commit()
     return get_training_plan_or_404(db, plan.id)
+
+
+@router.post("/training-plans/{training_plan_id}/clone", response_model=TrainingPlanRead, status_code=status.HTTP_201_CREATED)
+def clone_training_plan(
+    training_plan_id: int,
+    payload: TrainingPlanCloneCreate,
+    current_user: User = Depends(require_roles(*TRAINING_EDIT_ROLES)),
+    db: Session = Depends(get_db),
+) -> TrainingPlan:
+    source = get_training_plan_or_404(db, training_plan_id)
+    target_student = db.get(Student, payload.student_id)
+    if target_student is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno de destino nao encontrado.")
+    cloned = TrainingPlan(
+        student_id=target_student.id,
+        name=payload.name or f"{source.name} - copia",
+        objective=source.objective,
+        start_date=source.start_date,
+        reassessment_date=source.reassessment_date,
+        notes=source.notes,
+        is_active=True,
+        created_by_id=current_user.id,
+    )
+    db.add(cloned)
+    db.flush()
+
+    for exercise in source.exercises:
+        if not exercise.is_active:
+            continue
+        cloned_exercise = TrainingPlanExercise(
+            training_plan_id=cloned.id,
+            name=exercise.name,
+            muscle_group=exercise.muscle_group,
+            sets=exercise.sets,
+            repetitions=exercise.repetitions,
+            load=exercise.load,
+            rest=exercise.rest,
+            notes=exercise.notes,
+            sort_order=exercise.sort_order,
+            is_active=True,
+        )
+        db.add(cloned_exercise)
+        db.flush()
+        for media in exercise.media:
+            if not media.is_active:
+                continue
+            db.add(
+                TrainingPlanExerciseMedia(
+                    training_plan_exercise_id=cloned_exercise.id,
+                    media_type=media.media_type,
+                    file_url=media.file_url,
+                    external_url=media.external_url,
+                    thumbnail_url=media.thumbnail_url,
+                    title=media.title,
+                    description=media.description,
+                    sort_order=media.sort_order,
+                    is_active=True,
+                    created_by_user_id=current_user.id,
+                )
+            )
+
+    db.flush()
+    record_audit(
+        db,
+        current_user,
+        entity_type="TRAINING_PLAN",
+        entity_id=cloned.id,
+        action="CLONE",
+        summary=f"Ficha {source.name} clonada para {target_student.name}: {cloned.name}.",
+        before=model_snapshot(source),
+        after=model_snapshot(cloned),
+    )
+    db.commit()
+    return get_training_plan_or_404(db, cloned.id)
 
 
 @router.post("/training-plans/{training_plan_id}/deactivate", response_model=APIMessage)

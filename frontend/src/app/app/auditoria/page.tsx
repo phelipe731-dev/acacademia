@@ -9,7 +9,21 @@ import { apiFetch, formatDate, getSession } from "@/lib/api";
 import type { AuditLog, UserRole } from "@/lib/types";
 
 const entityTypes = ["", "USER", "STUDENT", "PAYMENT", "PRODUCT", "STOCK_MOVEMENT", "SALE"];
-const actions = ["", "CREATE", "UPDATE", "DELETE", "DEACTIVATE", "PAY", "IMPORT", "GENERATE_MONTHLY", "ENTRADA", "AJUSTE", "SAIDA_VENDA"];
+const actions = [
+  "",
+  "CREATE",
+  "UPDATE",
+  "DELETE",
+  "DEACTIVATE",
+  "PAY",
+  "IMPORT",
+  "GENERATE_MONTHLY",
+  "CLONE",
+  "ENTRADA",
+  "SAIDA",
+  "AJUSTE",
+  "SAIDA_VENDA"
+];
 
 export default function AuditPage() {
   const [role, setRole] = useState<UserRole>("RECEPCAO");

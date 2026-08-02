@@ -6,7 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Message } from "@/components/Message";
 import { EmptyState, PageHeader, SkeletonRows, getErrorMessage } from "@/components/ui";
 import { apiFetch, formatDate, formatMoney } from "@/lib/api";
-import type { PaymentMethod, Product, Sale } from "@/lib/types";
+import type { PaymentMethod, Product, Sale, SalePaymentMethod, Student } from "@/lib/types";
 
 interface DraftItem {
   key: string;
@@ -20,23 +20,46 @@ function makeItem(key?: string): DraftItem {
   return { key: key ?? crypto.randomUUID(), product_id: "", quantity: "1" };
 }
 
-const paymentMethods: PaymentMethod[] = ["DINHEIRO", "PIX", "CARTAO", "OUTRO"];
+const paymentMethods: SalePaymentMethod[] = ["DINHEIRO", "PIX", "CARTAO", "PRAZO", "OUTRO"];
+const installmentMethods: PaymentMethod[] = ["PIX", "DINHEIRO", "CARTAO", "OUTRO"];
+
+function salePaymentLabel(sale: Sale) {
+  if (sale.payment_method !== "PRAZO") return sale.payment_method;
+  const method = sale.installment_payment_method ? ` via ${sale.installment_payment_method}` : "";
+  return `PRAZO · ${sale.installments_count}x${method}`;
+}
 
 export default function SalesPage() {
+  const [students, setStudents] = useState<Student[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [items, setItems] = useState<DraftItem[]>(() => [makeItem("initial")]);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("PIX");
+  const [studentId, setStudentId] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>("PIX");
+  const [installmentsCount, setInstallmentsCount] = useState("2");
+  const [installmentPaymentMethod, setInstallmentPaymentMethod] = useState<PaymentMethod>("PIX");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const selectedStudentId = params.get("student_id");
+    const selectedPaymentMethod = params.get("payment_method") as SalePaymentMethod | null;
+    if (selectedStudentId) setStudentId(selectedStudentId);
+    if (selectedPaymentMethod && paymentMethods.includes(selectedPaymentMethod)) {
+      setPaymentMethod(selectedPaymentMethod);
+    }
+  }, []);
+
   async function load() {
-    const [productsData, salesData] = await Promise.all([
+    const [studentsData, productsData, salesData] = await Promise.all([
+      apiFetch<Student[]>("/students"),
       apiFetch<Product[]>("/products?available_for_sale=true"),
       apiFetch<Sale[]>("/sales")
     ]);
+    setStudents(studentsData);
     setProducts(productsData);
     setSales(salesData.slice(0, 10));
   }
@@ -71,12 +94,19 @@ export default function SalesPage() {
       await apiFetch<Sale>("/sales", {
         method: "POST",
         body: JSON.stringify({
+          student_id: Number(studentId),
           payment_method: paymentMethod,
+          installments_count: paymentMethod === "PRAZO" ? Number(installmentsCount) : 1,
+          installment_payment_method: paymentMethod === "PRAZO" ? installmentPaymentMethod : null,
           notes: notes || null,
           items: items.map((item) => ({ product_id: Number(item.product_id), quantity: Number(item.quantity) }))
         })
       });
       setItems([makeItem()]);
+      setStudentId("");
+      setPaymentMethod("PIX");
+      setInstallmentsCount("2");
+      setInstallmentPaymentMethod("PIX");
       setNotes("");
       setMessage({ text: "Venda registrada e estoque atualizado.", type: "success" });
       await load();
@@ -105,6 +135,24 @@ export default function SalesPage() {
               <Plus className="h-4 w-4" aria-hidden />
               Item
             </button>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="sale-student">Aluno</label>
+            <select
+              id="sale-student"
+              className="field"
+              required
+              value={studentId}
+              onChange={(event) => setStudentId(event.target.value)}
+            >
+              <option value="">Selecione o aluno</option>
+              {students.map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.name} · {student.phone}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-3">
@@ -169,7 +217,7 @@ export default function SalesPage() {
                 id="sale-payment-method"
                 className="field"
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                onChange={(e) => setPaymentMethod(e.target.value as SalePaymentMethod)}
               >
                 {paymentMethods.map((method) => (
                   <option key={method} value={method}>{method}</option>
@@ -194,6 +242,40 @@ export default function SalesPage() {
             </div>
           </div>
 
+          {paymentMethod === "PRAZO" ? (
+            <div className="grid gap-3 rounded-lg border border-line bg-paper/70 p-3.5 md:grid-cols-[160px_220px_1fr] md:items-end">
+              <div>
+                <label className="label" htmlFor="sale-installments">Parcelas</label>
+                <input
+                  id="sale-installments"
+                  className="field"
+                  required
+                  type="number"
+                  min="2"
+                  max="24"
+                  value={installmentsCount}
+                  onChange={(event) => setInstallmentsCount(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="sale-installment-method">Forma combinada</label>
+                <select
+                  id="sale-installment-method"
+                  className="field"
+                  value={installmentPaymentMethod}
+                  onChange={(event) => setInstallmentPaymentMethod(event.target.value as PaymentMethod)}
+                >
+                  {installmentMethods.map((method) => (
+                    <option key={method} value={method}>{method}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-sm leading-6 text-ink/60">
+                O valor fica registrado no historico do aluno como venda a prazo informal.
+              </p>
+            </div>
+          ) : null}
+
           <button className="btn-primary w-full" type="submit" disabled={submitting}>
             <ShoppingCart className="h-4 w-4" aria-hidden />
             {submitting ? "Registrando..." : "Finalizar venda"}
@@ -214,7 +296,9 @@ export default function SalesPage() {
                     <p className="text-sm font-semibold text-ink">Venda #{sale.id}</p>
                     <p className="text-sm font-bold text-brand">{formatMoney(sale.total_amount)}</p>
                   </div>
-                  <p className="text-xs text-ink/55">{formatDate(sale.created_at)} · {sale.payment_method}</p>
+                  <p className="text-xs text-ink/55">
+                    {sale.student?.name || "Aluno nao informado"} · {formatDate(sale.created_at)} · {salePaymentLabel(sale)}
+                  </p>
                 </div>
               ))
             )}

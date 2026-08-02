@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.enums import PaymentMethod
+from app.models.enums import PaymentMethod, SalePaymentMethod
 
 
 def utcnow() -> datetime:
@@ -16,15 +16,22 @@ class Sale(Base):
     __tablename__ = "sales"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    payment_method: Mapped[PaymentMethod] = mapped_column(
-        Enum(PaymentMethod, name="sale_payment_method", native_enum=False),
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("students.id", ondelete="SET NULL"), index=True)
+    payment_method: Mapped[SalePaymentMethod] = mapped_column(
+        Enum(SalePaymentMethod, name="sale_payment_method", native_enum=False),
         nullable=False,
+    )
+    installments_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    installment_payment_method: Mapped[PaymentMethod | None] = mapped_column(
+        Enum(PaymentMethod, name="sale_installment_payment_method", native_enum=False),
+        nullable=True,
     )
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
+    student = relationship("Student", back_populates="sales")
     created_by = relationship("User", back_populates="sales")
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
 

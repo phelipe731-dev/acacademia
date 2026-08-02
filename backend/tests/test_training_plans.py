@@ -104,6 +104,52 @@ def test_training_plan_public_link_media_and_revoke(client: TestClient) -> None:
     assert client.get(f"/public/training-plans/{token}").status_code == 404
 
 
+def test_training_plan_exercise_can_be_edited_and_plan_can_be_cloned(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    source_student = create_student(client, headers)
+    target_student = client.post(
+        "/students",
+        headers=headers,
+        json={
+            "name": "Aluno Destino",
+            "phone": "11988887777",
+            "email": "destino@example.com",
+            "cpf": None,
+            "birth_date": None,
+            "plan": "Mensal",
+            "monthly_fee": 120,
+            "due_day": 10,
+            "status": "ATIVO",
+            "notes": None,
+        },
+    )
+    assert target_student.status_code == 201, target_student.text
+    plan = _create_training_plan(client, headers, source_student["id"])
+    exercise = _create_exercise(client, headers, plan["id"])
+
+    edited = client.patch(
+        f"/training-plan-exercises/{exercise['id']}",
+        headers=headers,
+        json={"sets": "5", "repetitions": "8 a 10", "load": "Progressiva", "sort_order": 2},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["sets"] == "5"
+    assert edited.json()["repetitions"] == "8 a 10"
+    assert edited.json()["sort_order"] == 2
+
+    cloned = client.post(
+        f"/training-plans/{plan['id']}/clone",
+        headers=headers,
+        json={"student_id": target_student.json()["id"], "name": "Ficha clonada"},
+    )
+    assert cloned.status_code == 201, cloned.text
+    body = cloned.json()
+    assert body["student_id"] == target_student.json()["id"]
+    assert body["name"] == "Ficha clonada"
+    assert body["exercises"][0]["name"] == "Supino reto"
+    assert body["exercises"][0]["sets"] == "5"
+
+
 def test_professor_can_manage_training_but_not_sensitive_modules(client: TestClient) -> None:
     admin_headers = create_admin_and_headers(client)
     professor_headers = _create_user_and_login(client, admin_headers, "PROFESSOR")

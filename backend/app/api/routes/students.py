@@ -10,11 +10,13 @@ from app.db.session import get_db
 from app.models.checkin import CheckIn
 from app.models.enums import StudentStatus, UserRole
 from app.models.payment import Payment
+from app.models.sale import Sale, SaleItem
 from app.models.student import Student
 from app.models.user import User
 from app.schemas.common import APIMessage
 from app.schemas.engagement import BirthdayRow, ExpiringPlanRow, InactiveStudentRow
 from app.schemas.payment import PaymentRead
+from app.schemas.sale import SaleRead
 from app.schemas.imports import StudentImportResult
 from app.schemas.student import StudentCreate, StudentRead, StudentUpdate
 from app.services.audit import model_snapshot, record_audit
@@ -262,5 +264,28 @@ def list_student_payments(
             .where(Payment.student_id == student_id)
             .options(selectinload(Payment.created_by))
             .order_by(Payment.due_date.desc())
+        ).all()
+    )
+
+
+@router.get("/{student_id}/sales", response_model=list[SaleRead])
+def list_student_sales(
+    student_id: int,
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
+    db: Session = Depends(get_db),
+) -> list[Sale]:
+    student = db.get(Student, student_id)
+    if student is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
+    return list(
+        db.scalars(
+            select(Sale)
+            .where(Sale.student_id == student_id)
+            .options(
+                selectinload(Sale.items).selectinload(SaleItem.product),
+                selectinload(Sale.created_by),
+                selectinload(Sale.student),
+            )
+            .order_by(Sale.created_at.desc())
         ).all()
     )

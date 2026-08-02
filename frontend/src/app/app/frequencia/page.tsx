@@ -14,6 +14,7 @@ export default function FrequenciaPage() {
   const [inactive, setInactive] = useState<InactiveStudentRow[]>([]);
   const [inactiveDays, setInactiveDays] = useState(15);
   const [search, setSearch] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [registeringId, setRegisteringId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
@@ -30,11 +31,22 @@ export default function FrequenciaPage() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setSelectedStudentId(params.get("student_id"));
+  }, []);
+
+  useEffect(() => {
     load()
       .catch((err) => setMessage({ text: getErrorMessage(err, "Erro ao carregar frequencia."), type: "error" }))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inactiveDays]);
+
+  useEffect(() => {
+    if (!selectedStudentId || students.length === 0) return;
+    const selected = students.find((student) => student.id === Number(selectedStudentId));
+    if (selected) setSearch(selected.name);
+  }, [selectedStudentId, students]);
 
   const checkedInToday = useMemo(() => new Set(today.map((item) => item.student_id)), [today]);
 

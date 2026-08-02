@@ -43,6 +43,13 @@ def create_stock_movement(
 
     if payload.type == StockMovementType.ENTRADA:
         product.stock_quantity += payload.quantity
+    elif payload.type == StockMovementType.SAIDA:
+        if product.stock_quantity < payload.quantity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Estoque insuficiente para {product.name}. Disponivel: {product.stock_quantity}.",
+            )
+        product.stock_quantity -= payload.quantity
     elif payload.type == StockMovementType.AJUSTE:
         new_quantity = product.stock_quantity + payload.quantity
         if new_quantity < 0:

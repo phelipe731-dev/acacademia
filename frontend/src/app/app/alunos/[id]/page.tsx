@@ -1,15 +1,42 @@
 "use client";
 
-import { Dumbbell, ExternalLink, Plus, Receipt, Save } from "lucide-react";
+import {
+  CalendarPlus,
+  CheckCircle,
+  CreditCard,
+  Dumbbell,
+  ExternalLink,
+  Plus,
+  Receipt,
+  Save,
+  ShoppingBag,
+  UserCheck
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, use, useEffect, useState } from "react";
+import { FormEvent, use, useEffect, useMemo, useState } from "react";
 
 import { Message } from "@/components/Message";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState, MobileRecord, MobileRecordRow, PageHeader, SkeletonRows, getErrorMessage } from "@/components/ui";
 import { apiFetch, formatDate, formatMoney, getSession } from "@/lib/api";
-import type { Payment, Student, StudentStatus, TrainingPlan, UserRole } from "@/lib/types";
+import type { Payment, Sale, Student, StudentStatus, TrainingPlan, UserRole } from "@/lib/types";
+
+function salePaymentLabel(sale: Sale) {
+  if (sale.payment_method !== "PRAZO") return sale.payment_method;
+  const method = sale.installment_payment_method ? ` via ${sale.installment_payment_method}` : "";
+  return `PRAZO · ${sale.installments_count}x${method}`;
+}
+
+function saleItemsLabel(sale: Sale) {
+  return sale.items
+    .map((item) => `${item.quantity}x ${item.product?.name ?? `Produto #${item.product_id}`}`)
+    .join(", ");
+}
+
+function sumMoney<T>(items: T[], picker: (item: T) => string | number) {
+  return items.reduce((total, item) => total + Number(picker(item) || 0), 0);
+}
 
 export default function StudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   // No Next.js 16, `params` é uma Promise; `use()` a resolve no Client Component.
@@ -17,6 +44,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
   const router = useRouter();
   const [student, setStudent] = useState<Student | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [trainingPlans, setTrainingPlans] = useState<TrainingPlan[]>([]);
   const [role, setRole] = useState<UserRole>("RECEPCAO");
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
@@ -31,13 +59,15 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
   });
 
   async function load(currentRole = role) {
-    const [studentData, paymentsData, trainingData] = await Promise.all([
+    const [studentData, paymentsData, salesData, trainingData] = await Promise.all([
       apiFetch<Student>(`/students/${id}`),
       currentRole === "PROFESSOR" ? Promise.resolve([]) : apiFetch<Payment[]>(`/students/${id}/payments`),
+      currentRole === "PROFESSOR" ? Promise.resolve([]) : apiFetch<Sale[]>(`/students/${id}/sales`),
       apiFetch<TrainingPlan[]>(`/students/${id}/training-plans`)
     ]);
     setStudent(studentData);
     setPayments(paymentsData);
+    setSales(salesData);
     setTrainingPlans(trainingData);
   }
 
@@ -104,6 +134,20 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  const paidPayments = useMemo(() => payments.filter((payment) => payment.status === "PAGO"), [payments]);
+  const openPayments = useMemo(
+    () => payments.filter((payment) => payment.status === "PENDENTE" || payment.status === "ATRASADO"),
+    [payments]
+  );
+  const installmentSales = useMemo(() => sales.filter((sale) => sale.payment_method === "PRAZO"), [sales]);
+  const paidPaymentsTotal = useMemo(() => sumMoney(paidPayments, (payment) => payment.amount), [paidPayments]);
+  const openPaymentsTotal = useMemo(() => sumMoney(openPayments, (payment) => payment.amount), [openPayments]);
+  const salesTotal = useMemo(() => sumMoney(sales, (sale) => sale.total_amount), [sales]);
+  const installmentSalesTotal = useMemo(
+    () => sumMoney(installmentSales, (sale) => sale.total_amount),
+    [installmentSales]
+  );
+
   if (!student) {
     if (message?.type === "error") return <Message message={message.text} type="error" />;
     return (
@@ -129,6 +173,75 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       </PageHeader>
 
       {message ? <Message message={message.text} type={message.type} /> : null}
+
+      <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
+        <div className="panel p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="panel-title">Resumo do aluno</h2>
+              <p className="mt-1 text-sm text-ink/60">Dados principais, plano atual e historico financeiro consolidado.</p>
+            </div>
+            <StatusBadge value={student.status} />
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <InfoItem label="Telefone" value={student.phone} />
+            <InfoItem label="E-mail" value={student.email || "-"} />
+            <InfoItem label="CPF" value={student.cpf || "-"} />
+            <InfoItem label="Nascimento" value={formatDate(student.birth_date)} />
+            <InfoItem label="Plano" value={student.plan} />
+            <InfoItem label="Mensalidade" value={formatMoney(student.monthly_fee)} />
+            <InfoItem label="Vencimento" value={`Dia ${student.due_day}`} />
+            <InfoItem label="Fim do plano" value={formatDate(student.plan_end_date)} />
+            <InfoItem label="Cadastro" value={formatDate(student.created_at)} />
+            <InfoItem label="Atualizacao" value={formatDate(student.updated_at)} />
+            <div className="sm:col-span-2">
+              <InfoItem label="Observacoes" value={student.notes || "-"} />
+            </div>
+          </div>
+
+          {role !== "PROFESSOR" ? (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <SummaryStat label="Mensalidades pagas" value={formatMoney(paidPaymentsTotal)} hint={`${paidPayments.length} lancamento(s)`} />
+              <SummaryStat label="Em aberto" value={formatMoney(openPaymentsTotal)} hint={`${openPayments.length} pendencia(s)`} />
+              <SummaryStat label="Produtos comprados" value={formatMoney(salesTotal)} hint={`${sales.length} venda(s)`} />
+              <SummaryStat label="Vendas a prazo" value={formatMoney(installmentSalesTotal)} hint={`${installmentSales.length} venda(s)`} />
+            </div>
+          ) : null}
+        </div>
+
+        <aside className="panel p-5">
+          <h2 className="panel-title">Acoes do aluno</h2>
+          <div className="mt-4 grid gap-2">
+            {role !== "PROFESSOR" ? (
+              <>
+                <Link className="btn-primary w-full" href={`/app/mensalidades?student_id=${student.id}&amount=${student.monthly_fee}`}>
+                  <Receipt className="h-4 w-4" aria-hidden />
+                  Registrar mensalidade
+                </Link>
+                <Link className="btn-secondary w-full" href={`/app/vendas?student_id=${student.id}`}>
+                  <ShoppingBag className="h-4 w-4" aria-hidden />
+                  Vender produto
+                </Link>
+                <Link className="btn-secondary w-full" href={`/app/vendas?student_id=${student.id}&payment_method=PRAZO`}>
+                  <CreditCard className="h-4 w-4" aria-hidden />
+                  Venda parcelada
+                </Link>
+                <Link className="btn-secondary w-full" href={`/app/frequencia?student_id=${student.id}`}>
+                  <UserCheck className="h-4 w-4" aria-hidden />
+                  Registrar frequencia
+                </Link>
+              </>
+            ) : null}
+            {canEditTraining ? (
+              <a className="btn-secondary w-full" href="#fichas-treino">
+                <CalendarPlus className="h-4 w-4" aria-hidden />
+                Criar ficha de treino
+              </a>
+            ) : null}
+          </div>
+        </aside>
+      </section>
 
       <form onSubmit={handleUpdate} className="panel p-5">
         <h2 className="panel-title">Dados do aluno</h2>
@@ -192,7 +305,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </form>
 
-      <section className="panel p-5">
+      <section id="fichas-treino" className="panel p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="panel-title">Fichas de treino</h2>
@@ -299,17 +412,23 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       {role !== "PROFESSOR" ? (
       <section className="panel p-5">
         <h2 className="panel-title">Historico financeiro</h2>
-        <div className="mt-4">
-          {payments.length === 0 ? (
+        <div className="mt-4 space-y-6">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
+              <CheckCircle className="h-4 w-4 text-success-dark" aria-hidden />
+              Mensalidades pagas
+            </h3>
+            <div className="mt-3">
+          {paidPayments.length === 0 ? (
             <EmptyState
               icon={Receipt}
-              title="Nenhuma mensalidade registrada"
-              hint="As mensalidades deste aluno aparecerao aqui."
+              title="Nenhuma mensalidade paga"
+              hint="Pagamentos confirmados deste aluno aparecerao aqui."
             />
           ) : (
             <>
               <div className="mobile-card-list">
-                {payments.map((payment) => (
+                {paidPayments.map((payment) => (
                   <MobileRecord
                     key={payment.id}
                     title={formatMoney(payment.amount)}
@@ -334,7 +453,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
                     </tr>
                   </thead>
                   <tbody>
-                    {payments.map((payment) => (
+                    {paidPayments.map((payment) => (
                       <tr key={payment.id}>
                         <td>{formatDate(payment.due_date)}</td>
                         <td>{formatDate(payment.paid_at)}</td>
@@ -348,9 +467,147 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </>
           )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-bold text-ink">Historico de mensalidades</h3>
+            <div className="mt-3">
+              {payments.length === 0 ? (
+                <EmptyState
+                  icon={Receipt}
+                  title="Nenhuma mensalidade registrada"
+                  hint="Todos os lancamentos de mensalidade do aluno aparecerao aqui."
+                />
+              ) : (
+                <>
+                  <div className="mobile-card-list">
+                    {payments.map((payment) => (
+                      <MobileRecord
+                        key={payment.id}
+                        title={formatMoney(payment.amount)}
+                        subtitle={`Vencimento ${formatDate(payment.due_date)}`}
+                        badge={<StatusBadge value={payment.status} />}
+                      >
+                        <MobileRecordRow label="Pagamento" value={formatDate(payment.paid_at)} />
+                        <MobileRecordRow label="Forma" value={payment.payment_method} />
+                        <MobileRecordRow label="Obs." value={payment.notes || "-"} />
+                      </MobileRecord>
+                    ))}
+                  </div>
+
+                  <div className="desktop-table-wrap">
+                    <table className="table-base min-w-[760px]">
+                      <thead>
+                        <tr>
+                          <th>Vencimento</th>
+                          <th>Pagamento</th>
+                          <th>Valor</th>
+                          <th>Forma</th>
+                          <th>Status</th>
+                          <th>Obs.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payments.map((payment) => (
+                          <tr key={payment.id}>
+                            <td>{formatDate(payment.due_date)}</td>
+                            <td>{formatDate(payment.paid_at)}</td>
+                            <td>{formatMoney(payment.amount)}</td>
+                            <td>{payment.payment_method}</td>
+                            <td><StatusBadge value={payment.status} /></td>
+                            <td>{payment.notes || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-bold text-ink">Produtos vendidos e vendas parceladas</h3>
+            <div className="mt-3">
+              {sales.length === 0 ? (
+                <EmptyState
+                  icon={ShoppingBag}
+                  title="Nenhuma venda de produto registrada"
+                  hint="Vendas vinculadas ao aluno aparecerao aqui."
+                />
+              ) : (
+                <>
+                  <div className="mobile-card-list">
+                    {sales.map((sale) => (
+                      <MobileRecord
+                        key={sale.id}
+                        title={formatMoney(sale.total_amount)}
+                        subtitle={`Venda #${sale.id} · ${formatDate(sale.created_at)}`}
+                        badge={<StatusBadge value={sale.payment_method} />}
+                      >
+                        <MobileRecordRow label="Forma" value={salePaymentLabel(sale)} />
+                        <MobileRecordRow label="Parcelas" value={sale.payment_method === "PRAZO" ? `${sale.installments_count}x` : "-"} />
+                        <MobileRecordRow label="Itens" value={saleItemsLabel(sale)} />
+                        <MobileRecordRow label="Obs." value={sale.notes || "-"} />
+                      </MobileRecord>
+                    ))}
+                  </div>
+
+                  <div className="desktop-table-wrap">
+                    <table className="table-base min-w-[760px]">
+                      <thead>
+                        <tr>
+                          <th>Data</th>
+                          <th>Venda</th>
+                          <th>Itens</th>
+                          <th>Forma</th>
+                          <th>Parcelas</th>
+                          <th>Total</th>
+                          <th>Obs.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sales.map((sale) => (
+                          <tr key={sale.id}>
+                            <td>{formatDate(sale.created_at)}</td>
+                            <td>#{sale.id}</td>
+                            <td>{saleItemsLabel(sale)}</td>
+                            <td>{salePaymentLabel(sale)}</td>
+                            <td>{sale.payment_method === "PRAZO" ? `${sale.installments_count}x` : "-"}</td>
+                            <td>{formatMoney(sale.total_amount)}</td>
+                            <td>{sale.notes || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </section>
       ) : null}
+    </div>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-line bg-paper/70 px-3.5 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink/45">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-surface px-3.5 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink/45">{label}</p>
+      <p className="mt-1 text-lg font-bold text-ink">{value}</p>
+      <p className="mt-0.5 text-xs text-ink/55">{hint}</p>
     </div>
   );
 }

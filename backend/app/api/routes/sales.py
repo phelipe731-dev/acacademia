@@ -19,18 +19,25 @@ router = APIRouter(prefix="/sales", tags=["sales"])
 def list_sales(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    student_id: int | None = Query(default=None),
     _: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
     db: Session = Depends(get_db),
 ) -> list[Sale]:
     stmt = (
         select(Sale)
-        .options(selectinload(Sale.items).selectinload(SaleItem.product), selectinload(Sale.created_by))
+        .options(
+            selectinload(Sale.items).selectinload(SaleItem.product),
+            selectinload(Sale.created_by),
+            selectinload(Sale.student),
+        )
         .order_by(Sale.created_at.desc())
     )
     if start_date:
         stmt = stmt.where(Sale.created_at >= datetime.combine(start_date, time.min))
     if end_date:
         stmt = stmt.where(Sale.created_at <= datetime.combine(end_date, time.max))
+    if student_id:
+        stmt = stmt.where(Sale.student_id == student_id)
     return list(db.scalars(stmt).all())
 
 

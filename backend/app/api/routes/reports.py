@@ -178,17 +178,30 @@ def sales_report(
             Sale.id,
             Sale.created_at,
             Sale.payment_method,
+            Student.name,
             Sale.total_amount,
             User.name,
             func.coalesce(func.sum(SaleItem.quantity), 0),
+            Sale.installments_count,
+            Sale.installment_payment_method,
         )
         .join(SaleItem, SaleItem.sale_id == Sale.id)
+        .outerjoin(Student, Student.id == Sale.student_id)
         .outerjoin(User, User.id == Sale.created_by_id)
         .where(
             Sale.created_at >= day_start_utc(start),
             Sale.created_at < day_after_utc(end),
         )
-        .group_by(Sale.id, Sale.created_at, Sale.payment_method, Sale.total_amount, User.name)
+        .group_by(
+            Sale.id,
+            Sale.created_at,
+            Sale.payment_method,
+            Student.name,
+            Sale.total_amount,
+            User.name,
+            Sale.installments_count,
+            Sale.installment_payment_method,
+        )
         .order_by(Sale.created_at.desc())
     ).all()
     return [
@@ -196,9 +209,12 @@ def sales_report(
             id=row[0],
             created_at=row[1],
             payment_method=row[2].value if hasattr(row[2], "value") else str(row[2]),
-            total_amount=row[3],
-            user_name=row[4],
-            items_count=row[5],
+            student_name=row[3],
+            total_amount=row[4],
+            user_name=row[5],
+            items_count=row[6],
+            installments_count=row[7],
+            installment_payment_method=row[8].value if hasattr(row[8], "value") else row[8],
         )
         for row in rows
     ]
@@ -218,7 +234,10 @@ def sales_csv(
             {
                 "id": row.id,
                 "data": row.created_at,
+                "aluno": row.student_name,
                 "forma": row.payment_method,
+                "parcelas": row.installments_count,
+                "forma_parcelas": row.installment_payment_method,
                 "total": row.total_amount,
                 "usuario": row.user_name,
                 "itens": row.items_count,

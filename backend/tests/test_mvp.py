@@ -63,6 +63,27 @@ def test_create_product_and_stock_entry(client: TestClient) -> None:
     assert updated.json()["stock_quantity"] == 5
 
 
+def test_manual_stock_out_decrements_stock_and_blocks_negative_balance(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    product = create_product(client, headers, stock=5)
+
+    response = client.post(
+        "/stock-movements",
+        headers=headers,
+        json={"product_id": product["id"], "type": "SAIDA", "quantity": 2, "reason": "Perda/uso interno"},
+    )
+    assert response.status_code == 201, response.text
+    assert client.get(f"/products/{product['id']}", headers=headers).json()["stock_quantity"] == 3
+
+    blocked = client.post(
+        "/stock-movements",
+        headers=headers,
+        json={"product_id": product["id"], "type": "SAIDA", "quantity": 4, "reason": "Retirada acima do saldo"},
+    )
+    assert blocked.status_code == 400
+    assert client.get(f"/products/{product['id']}", headers=headers).json()["stock_quantity"] == 3
+
+
 def test_admin_can_edit_product_without_bypassing_stock_history(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     product = create_product(client, headers, stock=4)
@@ -100,15 +121,22 @@ def test_admin_can_edit_product_without_bypassing_stock_history(client: TestClie
 
 def test_sale_decrements_stock_and_creates_movement(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
     product = create_product(client, headers, stock=5)
 
     response = client.post(
         "/sales",
         headers=headers,
-        json={"payment_method": "DINHEIRO", "notes": None, "items": [{"product_id": product["id"], "quantity": 2}]},
+        json={
+            "student_id": student["id"],
+            "payment_method": "DINHEIRO",
+            "notes": None,
+            "items": [{"product_id": product["id"], "quantity": 2}],
+        },
     )
     assert response.status_code == 201, response.text
     assert response.json()["total_amount"] == "240.00"
+    assert response.json()["student"]["id"] == student["id"]
 
     updated = client.get(f"/products/{product['id']}", headers=headers)
     assert updated.json()["stock_quantity"] == 3
@@ -117,15 +145,55 @@ def test_sale_decrements_stock_and_creates_movement(client: TestClient) -> None:
     assert movements.status_code == 200
     assert any(item["type"] == "SAIDA_VENDA" for item in movements.json())
 
+    history = client.get(f"/students/{student['id']}/sales", headers=headers)
+    assert history.status_code == 200
+    assert history.json()[0]["id"] == response.json()["id"]
+
+
+def test_sale_requires_student_and_supports_informal_installments(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+    product = create_product(client, headers, stock=5)
+
+    missing_student = client.post(
+        "/sales",
+        headers=headers,
+        json={"payment_method": "PIX", "notes": None, "items": [{"product_id": product["id"], "quantity": 1}]},
+    )
+    assert missing_student.status_code == 422
+
+    response = client.post(
+        "/sales",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "payment_method": "PRAZO",
+            "installments_count": 3,
+            "installment_payment_method": "PIX",
+            "notes": "3x informal",
+            "items": [{"product_id": product["id"], "quantity": 1}],
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["payment_method"] == "PRAZO"
+    assert response.json()["installments_count"] == 3
+    assert response.json()["installment_payment_method"] == "PIX"
+
 
 def test_sale_blocks_when_stock_is_insufficient(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
     product = create_product(client, headers, stock=1)
 
     response = client.post(
         "/sales",
         headers=headers,
-        json={"payment_method": "PIX", "notes": None, "items": [{"product_id": product["id"], "quantity": 2}]},
+        json={
+            "student_id": student["id"],
+            "payment_method": "PIX",
+            "notes": None,
+            "items": [{"product_id": product["id"], "quantity": 2}],
+        },
     )
     assert response.status_code == 400
 

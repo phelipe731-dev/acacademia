@@ -8,12 +8,17 @@ from app.models.enums import ProductStatus, StockMovementType
 from app.models.product import Product
 from app.models.sale import Sale, SaleItem
 from app.models.stock import StockMovement
+from app.models.student import Student
 from app.models.user import User
 from app.schemas.sale import SaleCreate
 from app.services.audit import model_snapshot, record_audit
 
 
 def create_sale_with_stock(db: Session, payload: SaleCreate, current_user: User) -> Sale:
+    student = db.get(Student, payload.student_id)
+    if student is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
+
     product_ids = [item.product_id for item in payload.items]
     # with_for_update() serializa a baixa de estoque: duas vendas simultaneas do mesmo
     # produto nao conseguem ler o saldo ao mesmo tempo, evitando venda a descoberto.
@@ -41,7 +46,15 @@ def create_sale_with_stock(db: Session, payload: SaleCreate, current_user: User)
                 detail=f"Estoque insuficiente para {product.name}. Disponivel: {product.stock_quantity}.",
             )
 
-    sale = Sale(payment_method=payload.payment_method, notes=payload.notes, created_by_id=current_user.id, total_amount=0)
+    sale = Sale(
+        student_id=student.id,
+        payment_method=payload.payment_method,
+        installments_count=payload.installments_count,
+        installment_payment_method=payload.installment_payment_method,
+        notes=payload.notes,
+        created_by_id=current_user.id,
+        total_amount=0,
+    )
     db.add(sale)
     db.flush()
 
@@ -80,7 +93,7 @@ def create_sale_with_stock(db: Session, payload: SaleCreate, current_user: User)
         entity_type="SALE",
         entity_id=sale.id,
         action="CREATE",
-        summary=f"Venda registrada #{sale.id} no valor de {sale.total_amount}.",
+        summary=f"Venda registrada #{sale.id} para {student.name} no valor de {sale.total_amount}.",
         after=model_snapshot(sale),
     )
     db.commit()
@@ -90,5 +103,6 @@ def create_sale_with_stock(db: Session, payload: SaleCreate, current_user: User)
         .options(
             selectinload(Sale.items).selectinload(SaleItem.product),
             selectinload(Sale.created_by),
+            selectinload(Sale.student),
         )
     ).one()

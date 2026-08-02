@@ -14,7 +14,12 @@ const labels: Record<string, string> = {
   PAGO: "Pago",
   PENDENTE: "Pendente",
   ATRASADO: "Atrasado",
-  CANCELADO: "Cancelado"
+  CANCELADO: "Cancelado",
+  DINHEIRO: "Dinheiro",
+  PIX: "Pix",
+  CARTAO: "Cartao",
+  OUTRO: "Outro",
+  PRAZO: "Prazo"
 };
 
 export function StatusBadge({ value }: { value: string }) {

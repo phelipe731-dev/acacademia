@@ -11,12 +11,14 @@ import {
   ImageIcon,
   ImagePlus,
   Link2,
+  Pencil,
   PlayCircle,
   Plus,
   Save,
   Share2,
   Trash2,
-  Video
+  Video,
+  X
 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, use, useEffect, useMemo, useState } from "react";
@@ -31,6 +33,7 @@ import type {
   TrainingPlanExercise,
   TrainingPlanExerciseMedia,
   TrainingPlanShareLink,
+  Student,
   UserRole
 } from "@/lib/types";
 
@@ -64,7 +67,22 @@ interface ExerciseGroupSection {
   entries: TrainingPlanExercise[];
 }
 
-const emptyExercise = {
+interface ExerciseDraft {
+  name: string;
+  muscle_group: string;
+  sets: string;
+  repetitions: string;
+  load: string;
+  rest: string;
+  notes: string;
+  sort_order: string;
+}
+
+interface ExerciseEditDraft extends ExerciseDraft {
+  is_active: boolean;
+}
+
+const emptyExercise: ExerciseDraft = {
   name: "",
   muscle_group: "",
   sets: "",
@@ -74,6 +92,20 @@ const emptyExercise = {
   notes: "",
   sort_order: "1"
 };
+
+function exerciseToEditDraft(exercise: TrainingPlanExercise): ExerciseEditDraft {
+  return {
+    name: exercise.name,
+    muscle_group: exercise.muscle_group ?? "",
+    sets: exercise.sets ?? "",
+    repetitions: exercise.repetitions ?? "",
+    load: exercise.load ?? "",
+    rest: exercise.rest ?? "",
+    notes: exercise.notes ?? "",
+    sort_order: String(exercise.sort_order),
+    is_active: exercise.is_active
+  };
+}
 
 function emptyMedia(): MediaDraft {
   return {
@@ -133,24 +165,35 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
   const [role, setRole] = useState<UserRole>("RECEPCAO");
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [shareLink, setShareLink] = useState<TrainingPlanShareLink | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingPlan, setSavingPlan] = useState(false);
   const [creatingExercise, setCreatingExercise] = useState(false);
+  const [cloningPlan, setCloningPlan] = useState(false);
+  const [savingExerciseId, setSavingExerciseId] = useState<number | null>(null);
   const [sharing, setSharing] = useState(false);
   const [exerciseForm, setExerciseForm] = useState(emptyExercise);
+  const [editingExerciseId, setEditingExerciseId] = useState<number | null>(null);
+  const [editingExerciseForm, setEditingExerciseForm] = useState<ExerciseEditDraft>({
+    ...emptyExercise,
+    is_active: true
+  });
+  const [cloneForm, setCloneForm] = useState({ student_id: "", name: "" });
   const [mediaForms, setMediaForms] = useState<Record<number, MediaDraft>>({});
   const [addingMediaId, setAddingMediaId] = useState<number | null>(null);
 
   const canEdit = role === "ADMIN" || role === "PROFESSOR";
 
   async function load() {
-    const [planData, linkData] = await Promise.all([
+    const [planData, linkData, studentsData] = await Promise.all([
       apiFetch<TrainingPlan>(`/training-plans/${id}`),
-      apiFetch<TrainingPlanShareLink | null>(`/training-plans/${id}/share-link`)
+      apiFetch<TrainingPlanShareLink | null>(`/training-plans/${id}/share-link`),
+      apiFetch<Student[]>("/students")
     ]);
     setPlan(planData);
     setShareLink(linkData);
+    setStudents(studentsData);
   }
 
   useEffect(() => {
@@ -183,6 +226,10 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
   );
   const groupedExercises = useMemo(() => groupExercises(plan?.exercises ?? []), [plan?.exercises]);
   const publicPreviewGroups = useMemo(() => groupExercises(activeExercises), [activeExercises]);
+  const cloneTargetStudents = useMemo(
+    () => students.filter((student) => student.id !== plan?.student_id),
+    [students, plan?.student_id]
+  );
   const exerciseNumberById = useMemo(
     () =>
       new Map(
@@ -260,6 +307,47 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
     }
   }
 
+  function openEditExercise(exercise: TrainingPlanExercise) {
+    setEditingExerciseId(exercise.id);
+    setEditingExerciseForm(exerciseToEditDraft(exercise));
+    setMessage(null);
+  }
+
+  function cancelEditExercise() {
+    setEditingExerciseId(null);
+    setEditingExerciseForm({ ...emptyExercise, is_active: true });
+  }
+
+  async function saveExercise(event: FormEvent<HTMLFormElement>, exercise: TrainingPlanExercise) {
+    event.preventDefault();
+    if (!canEdit || savingExerciseId !== null) return;
+    setSavingExerciseId(exercise.id);
+    setMessage(null);
+    try {
+      await apiFetch<TrainingPlanExercise>(`/training-plan-exercises/${exercise.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editingExerciseForm.name,
+          muscle_group: editingExerciseForm.muscle_group || null,
+          sets: editingExerciseForm.sets || null,
+          repetitions: editingExerciseForm.repetitions || null,
+          load: editingExerciseForm.load || null,
+          rest: editingExerciseForm.rest || null,
+          notes: editingExerciseForm.notes || null,
+          sort_order: Number(editingExerciseForm.sort_order || 0),
+          is_active: editingExerciseForm.is_active
+        })
+      });
+      setEditingExerciseId(null);
+      setMessage({ text: "Exercicio atualizado.", type: "success" });
+      await load();
+    } catch (error) {
+      setMessage({ text: getErrorMessage(error, "Erro ao atualizar exercicio."), type: "error" });
+    } finally {
+      setSavingExerciseId(null);
+    }
+  }
+
   async function deactivateExercise(exercise: TrainingPlanExercise) {
     if (!window.confirm(`Inativar exercicio ${exercise.name}?`)) return;
     try {
@@ -310,6 +398,28 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
       await load();
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao inativar midia."), type: "error" });
+    }
+  }
+
+  async function clonePlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!plan || cloningPlan || !canEdit) return;
+    setCloningPlan(true);
+    setMessage(null);
+    try {
+      const cloned = await apiFetch<TrainingPlan>(`/training-plans/${plan.id}/clone`, {
+        method: "POST",
+        body: JSON.stringify({
+          student_id: Number(cloneForm.student_id),
+          name: cloneForm.name || null
+        })
+      });
+      setMessage({ text: "Ficha clonada.", type: "success" });
+      window.location.href = `/app/fichas/${cloned.id}`;
+    } catch (error) {
+      setMessage({ text: getErrorMessage(error, "Erro ao clonar ficha."), type: "error" });
+    } finally {
+      setCloningPlan(false);
     }
   }
 
@@ -716,56 +826,196 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
                           key={exercise.id}
                           className={`px-4 py-5 sm:px-5 ${exercise.is_active ? "bg-surface" : "bg-paper/70 opacity-80"}`}
                         >
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-start gap-3">
-                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-sm font-bold text-brand-dark">
-                                  {exerciseNumberById.get(exercise.id) ?? "-"}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                    <h3 className="text-base font-bold tracking-tight text-ink">{exercise.name}</h3>
-                                    <div className="w-fit">
-                                      <StatusBadge value={exercise.is_active ? "ATIVO" : "INATIVO"} />
-                                    </div>
-                                  </div>
-                                  <p className="mt-1 text-sm text-ink/55">
-                                    {exercise.muscle_group || "Sem grupo muscular definido"}
-                                  </p>
+                          {editingExerciseId === exercise.id ? (
+                            <form onSubmit={(event) => saveExercise(event, exercise)} className="grid gap-3 rounded-lg border border-line bg-paper/70 p-4">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                  <h3 className="text-base font-bold text-ink">Editar exercicio</h3>
+                                  <p className="mt-1 text-sm text-ink/55">As alteracoes aparecem no link do aluno apos salvar.</p>
+                                </div>
+                                <button
+                                  className="btn-secondary h-9 w-9 shrink-0 p-0"
+                                  type="button"
+                                  aria-label="Cancelar edicao"
+                                  title="Cancelar edicao"
+                                  disabled={savingExerciseId !== null}
+                                  onClick={cancelEditExercise}
+                                >
+                                  <X className="h-4 w-4" aria-hidden />
+                                </button>
+                              </div>
+                              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr),minmax(0,0.9fr),110px,140px]">
+                                <div>
+                                  <label className="label" htmlFor={`edit-exercise-name-${exercise.id}`}>Exercicio</label>
+                                  <input
+                                    id={`edit-exercise-name-${exercise.id}`}
+                                    className="field"
+                                    required
+                                    value={editingExerciseForm.name}
+                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, name: event.target.value })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="label" htmlFor={`edit-exercise-group-${exercise.id}`}>Grupo</label>
+                                  <input
+                                    id={`edit-exercise-group-${exercise.id}`}
+                                    className="field"
+                                    value={editingExerciseForm.muscle_group}
+                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, muscle_group: event.target.value })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="label" htmlFor={`edit-exercise-order-${exercise.id}`}>Ordem</label>
+                                  <input
+                                    id={`edit-exercise-order-${exercise.id}`}
+                                    className="field"
+                                    type="number"
+                                    min="0"
+                                    value={editingExerciseForm.sort_order}
+                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, sort_order: event.target.value })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="label" htmlFor={`edit-exercise-status-${exercise.id}`}>Status</label>
+                                  <select
+                                    id={`edit-exercise-status-${exercise.id}`}
+                                    className="field"
+                                    value={editingExerciseForm.is_active ? "ATIVO" : "INATIVO"}
+                                    onChange={(event) =>
+                                      setEditingExerciseForm({ ...editingExerciseForm, is_active: event.target.value === "ATIVO" })
+                                    }
+                                  >
+                                    <option value="ATIVO">Ativo</option>
+                                    <option value="INATIVO">Inativo</option>
+                                  </select>
                                 </div>
                               </div>
-
-                              {metrics.length > 0 ? (
-                                <div className="mt-4 flex flex-wrap gap-2">
-                                  {metrics.map((metric) => (
-                                    <ExercisePill key={`${exercise.id}-${metric}`} value={metric} />
-                                  ))}
-                                  <ExercisePill value={`Ordem ${exercise.sort_order}`} subdued />
+                              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                <div>
+                                  <label className="label" htmlFor={`edit-exercise-sets-${exercise.id}`}>Series</label>
+                                  <input
+                                    id={`edit-exercise-sets-${exercise.id}`}
+                                    className="field"
+                                    value={editingExerciseForm.sets}
+                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, sets: event.target.value })}
+                                  />
                                 </div>
-                              ) : (
-                                <div className="mt-4">
-                                  <ExercisePill value={`Ordem ${exercise.sort_order}`} subdued />
+                                <div>
+                                  <label className="label" htmlFor={`edit-exercise-reps-${exercise.id}`}>Repeticoes</label>
+                                  <input
+                                    id={`edit-exercise-reps-${exercise.id}`}
+                                    className="field"
+                                    value={editingExerciseForm.repetitions}
+                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, repetitions: event.target.value })}
+                                  />
                                 </div>
-                              )}
+                                <div>
+                                  <label className="label" htmlFor={`edit-exercise-load-${exercise.id}`}>Carga</label>
+                                  <input
+                                    id={`edit-exercise-load-${exercise.id}`}
+                                    className="field"
+                                    value={editingExerciseForm.load}
+                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, load: event.target.value })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="label" htmlFor={`edit-exercise-rest-${exercise.id}`}>Descanso</label>
+                                  <input
+                                    id={`edit-exercise-rest-${exercise.id}`}
+                                    className="field"
+                                    value={editingExerciseForm.rest}
+                                    onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, rest: event.target.value })}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="label" htmlFor={`edit-exercise-notes-${exercise.id}`}>Observacao</label>
+                                <input
+                                  id={`edit-exercise-notes-${exercise.id}`}
+                                  className="field"
+                                  value={editingExerciseForm.notes}
+                                  onChange={(event) => setEditingExerciseForm({ ...editingExerciseForm, notes: event.target.value })}
+                                />
+                              </div>
+                              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                <button
+                                  className="btn-secondary"
+                                  type="button"
+                                  disabled={savingExerciseId !== null}
+                                  onClick={cancelEditExercise}
+                                >
+                                  Cancelar
+                                </button>
+                                <button className="btn-primary" type="submit" disabled={savingExerciseId !== null}>
+                                  <Save className="h-4 w-4" aria-hidden />
+                                  {savingExerciseId === exercise.id ? "Salvando..." : "Salvar exercicio"}
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-start gap-3">
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-sm font-bold text-brand-dark">
+                                    {exerciseNumberById.get(exercise.id) ?? "-"}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                      <h3 className="text-base font-bold tracking-tight text-ink">{exercise.name}</h3>
+                                      <div className="w-fit">
+                                        <StatusBadge value={exercise.is_active ? "ATIVO" : "INATIVO"} />
+                                      </div>
+                                    </div>
+                                    <p className="mt-1 text-sm text-ink/55">
+                                      {exercise.muscle_group || "Sem grupo muscular definido"}
+                                    </p>
+                                  </div>
+                                </div>
 
-                              {exercise.notes ? (
-                                <p className="mt-4 rounded-xl border border-line bg-paper px-3.5 py-3 text-sm leading-6 text-ink/75">
-                                  {exercise.notes}
-                                </p>
+                                {metrics.length > 0 ? (
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                    {metrics.map((metric) => (
+                                      <ExercisePill key={`${exercise.id}-${metric}`} value={metric} />
+                                    ))}
+                                    <ExercisePill value={`Ordem ${exercise.sort_order}`} subdued />
+                                  </div>
+                                ) : (
+                                  <div className="mt-4">
+                                    <ExercisePill value={`Ordem ${exercise.sort_order}`} subdued />
+                                  </div>
+                                )}
+
+                                {exercise.notes ? (
+                                  <p className="mt-4 rounded-xl border border-line bg-paper px-3.5 py-3 text-sm leading-6 text-ink/75">
+                                    {exercise.notes}
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              {canEdit ? (
+                                <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                                  <button
+                                    className="btn-secondary w-full lg:w-auto"
+                                    type="button"
+                                    onClick={() => openEditExercise(exercise)}
+                                  >
+                                    <Pencil className="h-4 w-4" aria-hidden />
+                                    Editar
+                                  </button>
+                                  {exercise.is_active ? (
+                                    <button
+                                      className="btn-secondary w-full lg:w-auto"
+                                      type="button"
+                                      onClick={() => deactivateExercise(exercise)}
+                                    >
+                                      <Trash2 className="h-4 w-4" aria-hidden />
+                                      Inativar
+                                    </button>
+                                  ) : null}
+                                </div>
                               ) : null}
                             </div>
-
-                            {canEdit && exercise.is_active ? (
-                              <button
-                                className="btn-secondary w-full lg:w-auto"
-                                type="button"
-                                onClick={() => deactivateExercise(exercise)}
-                              >
-                                <Trash2 className="h-4 w-4" aria-hidden />
-                                Inativar
-                              </button>
-                            ) : null}
-                          </div>
+                          )}
 
                           <details className="group mt-4 overflow-hidden rounded-xl border border-line bg-paper/70" open={activeMedia.length > 0}>
                             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
@@ -967,6 +1217,48 @@ export default function TrainingPlanPage({ params }: { params: Promise<{ id: str
               </div>
             )}
           </section>
+
+          {canEdit ? (
+            <section className="panel p-5">
+              <h2 className="panel-title">Clonar ficha</h2>
+              <p className="mt-1 text-sm text-ink/55">
+                Copie esta ficha com exercicios e midias para outro aluno.
+              </p>
+              <form onSubmit={clonePlan} className="mt-4 space-y-3">
+                <div>
+                  <label className="label" htmlFor="clone-student">Aluno de destino</label>
+                  <select
+                    id="clone-student"
+                    className="field"
+                    required
+                    value={cloneForm.student_id}
+                    onChange={(event) => setCloneForm({ ...cloneForm, student_id: event.target.value })}
+                  >
+                    <option value="">Selecione o aluno</option>
+                    {cloneTargetStudents.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.name} · {student.phone}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="clone-name">Nome da nova ficha</label>
+                  <input
+                    id="clone-name"
+                    className="field"
+                    placeholder={`${plan.name} - copia`}
+                    value={cloneForm.name}
+                    onChange={(event) => setCloneForm({ ...cloneForm, name: event.target.value })}
+                  />
+                </div>
+                <button className="btn-secondary w-full" type="submit" disabled={cloningPlan}>
+                  <Copy className="h-4 w-4" aria-hidden />
+                  {cloningPlan ? "Clonando..." : "Clonar para aluno"}
+                </button>
+              </form>
+            </section>
+          ) : null}
 
           <StudentPreviewPhone
             plan={plan}

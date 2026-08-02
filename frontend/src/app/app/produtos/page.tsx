@@ -18,6 +18,23 @@ interface ProductEditForm {
   status: ProductStatus;
 }
 
+const movementLabels: Record<StockMovementType, string> = {
+  ENTRADA: "Entrada",
+  SAIDA: "Saida manual",
+  SAIDA_VENDA: "Venda",
+  AJUSTE: "Ajuste"
+};
+
+function movementQuantityLabel(movement: StockMovement) {
+  if (movement.type === "SAIDA" || movement.type === "SAIDA_VENDA") {
+    return `-${movement.quantity}`;
+  }
+  if (movement.type === "ENTRADA") {
+    return `+${movement.quantity}`;
+  }
+  return movement.quantity > 0 ? `+${movement.quantity}` : String(movement.quantity);
+}
+
 export default function ProductsPage() {
   const [role, setRole] = useState<UserRole>("RECEPCAO");
   const [products, setProducts] = useState<Product[]>([]);
@@ -293,7 +310,7 @@ export default function ProductsPage() {
           </form>
 
           <form onSubmit={handleStock} className="panel grid gap-4 p-5 md:grid-cols-2">
-            <h2 className="panel-title md:col-span-2">Entrada ou ajuste</h2>
+            <h2 className="panel-title md:col-span-2">Entrada, saida ou ajuste</h2>
             <div className="md:col-span-2">
               <label className="label" htmlFor="stock-product">Produto</label>
               <select
@@ -318,6 +335,7 @@ export default function ProductsPage() {
                 onChange={(e) => setStockForm({ ...stockForm, type: e.target.value as StockMovementType })}
               >
                 <option value="ENTRADA">Entrada</option>
+                <option value="SAIDA">Saida manual</option>
                 <option value="AJUSTE">Ajuste</option>
               </select>
             </div>
@@ -328,9 +346,13 @@ export default function ProductsPage() {
                 className="field"
                 required
                 type="number"
+                min={stockForm.type === "AJUSTE" ? undefined : "1"}
                 value={stockForm.quantity}
                 onChange={(e) => setStockForm({ ...stockForm, quantity: e.target.value })}
               />
+              <p className="mt-1 text-xs text-ink/50">
+                Em saida manual, informe quantidade positiva; o sistema baixa do saldo.
+              </p>
             </div>
             <div className="md:col-span-2">
               <label className="label" htmlFor="stock-reason">Motivo</label>
@@ -474,7 +496,9 @@ export default function ProductsPage() {
                   className="rounded-lg border border-line px-3.5 py-3 transition hover:bg-paper/70"
                 >
                   <p className="text-sm font-semibold text-ink">{movement.product?.name ?? movement.product_id}</p>
-                  <p className="text-xs text-ink/55">{movement.type} · {movement.quantity} un.</p>
+                  <p className="text-xs text-ink/55">
+                    {movementLabels[movement.type]} · {movementQuantityLabel(movement)} un.
+                  </p>
                 </div>
               ))
             )}

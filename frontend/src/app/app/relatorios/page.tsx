@@ -190,11 +190,16 @@ export default function ReportsPage() {
         empty="Sem vendas no periodo."
         rows={sales}
         render={(row) => (
-          <div key={row.id} className="grid gap-2 rounded-lg border border-line px-3.5 py-3 text-sm transition hover:bg-paper/70 md:grid-cols-5">
+          <div key={row.id} className="grid gap-2 rounded-lg border border-line px-3.5 py-3 text-sm transition hover:bg-paper/70 md:grid-cols-6">
             <ReportCell label="Venda" strong>#{row.id}</ReportCell>
+            <ReportCell label="Aluno">{row.student_name || "Sem aluno"}</ReportCell>
             <ReportCell label="Data">{formatDate(row.created_at)}</ReportCell>
             <ReportCell label="Total">{formatMoney(row.total_amount)}</ReportCell>
-            <ReportCell label="Forma">{row.payment_method}</ReportCell>
+            <ReportCell label="Forma">
+              {row.payment_method === "PRAZO"
+                ? `PRAZO · ${row.installments_count}x${row.installment_payment_method ? ` ${row.installment_payment_method}` : ""}`
+                : row.payment_method}
+            </ReportCell>
             <ReportCell label="Itens">{row.items_count} un.</ReportCell>
           </div>
         )}

@@ -28,6 +28,11 @@ class TrainingPlanUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class TrainingPlanCloneCreate(BaseModel):
+    student_id: int
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+
+
 class TrainingPlanExerciseBase(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     muscle_group: str | None = Field(default=None, max_length=120)
