@@ -42,16 +42,16 @@ DEMO_TAG = "DEMO_MOCKUP_VALIDADO"
 
 
 STUDENTS = [
-    ("Ana Costa", "11984561234", "ana.costa.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("129.90"), 5),
-    ("Bruno Almeida", "11976784512", "bruno.almeida.demo@demo.acacademia.com.br", "Plano Trimestral", Decimal("119.90"), 10),
-    ("Camila Rocha", "11955667788", "camila.rocha.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("139.90"), 12),
-    ("Diego Santos", "11933445566", "diego.santos.demo@demo.acacademia.com.br", "Plano Semestral", Decimal("109.90"), 15),
-    ("Fernanda Lima", "11999887766", "fernanda.lima.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("129.90"), 18),
-    ("Gustavo Martins", "11922223333", "gustavo.martins.demo@demo.acacademia.com.br", "Plano Trimestral", Decimal("119.90"), 20),
-    ("Helena Souza", "11911114444", "helena.souza.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("149.90"), 22),
-    ("Igor Pereira", "11933334444", "igor.pereira.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("129.90"), 25),
-    ("Juliana Nunes", "11955556666", "juliana.nunes.demo@demo.acacademia.com.br", "Plano Semestral", Decimal("109.90"), 8),
-    ("Lucas Oliveira", "11977778888", "lucas.oliveira.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("139.90"), 28),
+    ("Ana Costa", "11984561234", "ana.costa.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("129.90"), 5, "Rua das Palmeiras, 120 - Centro"),
+    ("Bruno Almeida", "11976784512", "bruno.almeida.demo@demo.acacademia.com.br", "Plano Trimestral", Decimal("119.90"), 10, "Av. Brasil, 455 - Vila Nova"),
+    ("Camila Rocha", "11955667788", "camila.rocha.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("139.90"), 12, "Rua Sao Bento, 88 - Jardim Europa"),
+    ("Diego Santos", "11933445566", "diego.santos.demo@demo.acacademia.com.br", "Plano Semestral", Decimal("109.90"), 15, "Rua Amazonas, 310 - Centro"),
+    ("Fernanda Lima", "11999887766", "fernanda.lima.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("129.90"), 18, "Av. Independencia, 72 - Vila Matilde"),
+    ("Gustavo Martins", "11922223333", "gustavo.martins.demo@demo.acacademia.com.br", "Plano Trimestral", Decimal("119.90"), 20, "Rua Bahia, 144 - Jardim Paulista"),
+    ("Helena Souza", "11911114444", "helena.souza.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("149.90"), 22, "Rua das Laranjeiras, 52 - Centro"),
+    ("Igor Pereira", "11933334444", "igor.pereira.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("129.90"), 25, "Rua Rio Branco, 901 - Vila Rica"),
+    ("Juliana Nunes", "11955556666", "juliana.nunes.demo@demo.acacademia.com.br", "Plano Semestral", Decimal("109.90"), 8, "Av. Ana Costa, 640 - Gonzaga"),
+    ("Lucas Oliveira", "11977778888", "lucas.oliveira.demo@demo.acacademia.com.br", "Plano Mensal", Decimal("139.90"), 28, "Rua XV de Novembro, 33 - Centro"),
 ]
 
 
@@ -90,7 +90,7 @@ def demo_admin(db: Session) -> User:
 def upsert_students(db: Session) -> list[Student]:
     today = business_today()
     result: list[Student] = []
-    for index, (name, phone, email, plan, fee, due_day) in enumerate(STUDENTS):
+    for index, (name, phone, email, plan, fee, due_day, address) in enumerate(STUDENTS):
         old_email = email.replace("@demo.acacademia.com.br", "@acacademia.local")
         student = db.scalar(
             select(Student).where(
@@ -107,6 +107,7 @@ def upsert_students(db: Session) -> list[Student]:
                 phone=phone,
                 email=email,
                 cpf=None,
+                address=address,
                 birth_date=None,
                 plan=plan,
                 plan_end_date=today + timedelta(days=45 + index * 3),
@@ -120,6 +121,7 @@ def upsert_students(db: Session) -> list[Student]:
             student.name = name
             student.phone = phone
             student.email = email
+            student.address = address
             student.plan = plan
             student.plan_end_date = student.plan_end_date or (today + timedelta(days=45 + index * 3))
             student.monthly_fee = fee

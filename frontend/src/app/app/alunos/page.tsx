@@ -32,6 +32,7 @@ interface StudentFormState {
   phone: string;
   email: string;
   cpf: string;
+  address: string;
   birth_date: string;
   plan: string;
   plan_end_date: string;
@@ -63,6 +64,7 @@ function createEmptyStudentForm(): StudentFormState {
     phone: "",
     email: "",
     cpf: "",
+    address: "",
     birth_date: "",
     plan: "Mensal",
     plan_end_date: "",
@@ -325,6 +327,7 @@ export default function StudentsPage() {
           phone: onlyDigits(form.phone) || form.phone.trim(),
           email: form.email.trim() || null,
           cpf: onlyDigits(form.cpf) || null,
+          address: form.address.trim(),
           birth_date: form.birth_date || null,
           plan: form.plan.trim(),
           plan_end_date: form.plan_end_date || null,
@@ -674,6 +677,17 @@ export default function StudentsPage() {
                     onChange={(event) => setForm({ ...form, birth_date: event.target.value })}
                   />
                 </div>
+                <div className="md:col-span-3">
+                  <label className="label" htmlFor="student-address">Endereco</label>
+                  <input
+                    id="student-address"
+                    className="field h-11"
+                    placeholder="Rua, numero, bairro e cidade"
+                    value={form.address}
+                    onChange={(event) => setForm({ ...form, address: event.target.value })}
+                    required
+                  />
+                </div>
               </div>
             </section>
 
@@ -791,7 +805,7 @@ export default function StudentsPage() {
               {importFile ? <p className="mt-2 text-sm font-semibold text-ink/70">{importFile.name}</p> : null}
             </div>
             <div className="rounded-lg border border-line bg-paper/70 p-3 text-sm leading-6 text-ink/65">
-              Colunas aceitas: nome, telefone, email, cpf, data_nascimento, plano, mensalidade, vencimento, status e observacoes.
+              Colunas aceitas: nome, telefone, endereco, email, cpf, data_nascimento, plano, mensalidade, vencimento, status e observacoes.
             </div>
             {importResult ? (
               <div className="rounded-lg border border-success/20 bg-success-soft p-3 text-sm text-success-dark">

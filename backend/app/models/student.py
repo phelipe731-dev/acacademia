@@ -20,6 +20,7 @@ class Student(Base):
     phone: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cpf: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     plan: Mapped[str] = mapped_column(String(120), nullable=False)
     plan_end_date: Mapped[date | None] = mapped_column(Date, index=True, nullable=True)

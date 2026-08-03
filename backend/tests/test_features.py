@@ -14,6 +14,7 @@ def _student_payload(**overrides) -> dict:
         "phone": "11900000000",
         "email": None,
         "cpf": None,
+        "address": "Rua Teste, 123 - Centro",
         "birth_date": None,
         "plan": "Mensal",
         "plan_end_date": None,

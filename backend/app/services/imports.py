@@ -27,6 +27,10 @@ HEADER_ALIASES = {
     "email": "email",
     "e-mail": "email",
     "cpf": "cpf",
+    "endereco": "address",
+    "endereço": "address",
+    "address": "address",
+    "logradouro": "address",
     "data_nascimento": "birth_date",
     "nascimento": "birth_date",
     "birth_date": "birth_date",
@@ -94,6 +98,7 @@ def map_row(raw: dict[str, Any]) -> dict[str, Any]:
 
     mapped["email"] = mapped.get("email") or None
     mapped["cpf"] = mapped.get("cpf") or None
+    mapped["address"] = mapped.get("address") or None
     mapped["birth_date"] = parse_date(mapped.get("birth_date"))
     mapped["monthly_fee"] = parse_decimal(mapped.get("monthly_fee"))
     mapped["due_day"] = int(mapped.get("due_day") or 1)

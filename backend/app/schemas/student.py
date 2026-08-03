@@ -11,6 +11,7 @@ class StudentBase(BaseModel):
     phone: str = Field(min_length=3, max_length=40)
     email: EmailStr | None = None
     cpf: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=255)
     birth_date: date | None = None
     plan: str = Field(min_length=2, max_length=120)
     plan_end_date: date | None = None
@@ -26,7 +27,7 @@ class StudentBase(BaseModel):
 
 
 class StudentCreate(StudentBase):
-    pass
+    address: str = Field(min_length=2, max_length=255)
 
 
 class StudentUpdate(BaseModel):
@@ -34,6 +35,7 @@ class StudentUpdate(BaseModel):
     phone: str | None = Field(default=None, min_length=3, max_length=40)
     email: EmailStr | None = None
     cpf: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=255)
     birth_date: date | None = None
     plan: str | None = Field(default=None, min_length=2, max_length=120)
     plan_end_date: date | None = None

@@ -21,6 +21,7 @@ import {
   LayoutGrid,
   ListChecks,
   Mail,
+  MapPin,
   Pencil,
   Phone,
   Plus,
@@ -298,6 +299,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
           phone: student.phone,
           email: student.email || null,
           cpf: student.cpf || null,
+          address: student.address?.trim() || null,
           birth_date: student.birth_date || null,
           plan: student.plan,
           plan_end_date: student.plan_end_date || null,
@@ -910,6 +912,7 @@ function StudentProfileSummary({ student, setActiveTab }: { student: Student; se
         <ProfileInfo icon={UserRound} label="CPF" value={formatCpf(student.cpf)} />
         <ProfileInfo icon={CalendarClock} label="Fim do plano" value={formatDate(student.plan_end_date)} />
         <ProfileInfo icon={Calendar} label="Nascimento" value={formatDate(student.birth_date)} />
+        <ProfileInfo icon={MapPin} label="Endereco" value={student.address || "-"} />
         <ProfileInfo icon={FileText} label="Observacoes" value={student.notes || "-"} />
       </div>
     </section>
@@ -1460,7 +1463,7 @@ function RegistrationTab({
     <form onSubmit={handleUpdate} className="panel p-4">
       <div className="flex flex-col gap-1">
         <h2 className="panel-title">Cadastro</h2>
-        <p className="text-sm text-ink/60">Dados pessoais, plano, cobranca e observacoes.</p>
+        <p className="text-sm text-ink/60">Dados pessoais, endereco, plano, cobranca e observacoes.</p>
       </div>
 
       <section className="mt-5">
@@ -1486,6 +1489,17 @@ function RegistrationTab({
               type="date"
               value={dateInputValue(student.birth_date)}
               onChange={(event) => setStudent({ ...student, birth_date: event.target.value })}
+            />
+          </Field>
+          <Field className="md:col-span-4" label="Endereco" id="edit-address">
+            <input
+              id="edit-address"
+              className="field"
+              disabled={readOnly}
+              placeholder="Rua, numero, bairro e cidade"
+              required={!readOnly}
+              value={student.address || ""}
+              onChange={(event) => setStudent({ ...student, address: event.target.value })}
             />
           </Field>
         </div>

@@ -59,6 +59,7 @@ def create_student(client: TestClient, headers: dict[str, str]) -> dict:
             "phone": "11999990000",
             "email": "maria@example.com",
             "cpf": None,
+            "address": "Rua das Flores, 100 - Centro",
             "birth_date": None,
             "plan": "Mensal",
             "monthly_fee": 120,

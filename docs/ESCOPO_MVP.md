@@ -20,11 +20,12 @@
 ### Alunos
 
 - Cadastro de aluno
+- Endereco solicitado no cadastro do aluno
 - Edicao e exclusao por ADMIN
 - Listagem com busca por nome/telefone
 - Filtro por status
 - Detalhe do aluno com historico financeiro
-- Importacao de alunos por arquivo `.csv` ou `.xlsx`, restrita ao ADMIN
+- Importacao de alunos por arquivo `.csv` ou `.xlsx`, restrita ao ADMIN, com coluna `endereco`
 - Retorno da importacao com total importado e erros por linha
 
 ### Mensalidades e pagamentos

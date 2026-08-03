@@ -29,6 +29,7 @@ export interface Student {
   phone: string;
   email?: string | null;
   cpf?: string | null;
+  address?: string | null;
   birth_date?: string | null;
   plan: string;
   plan_end_date?: string | null;

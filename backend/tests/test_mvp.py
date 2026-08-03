@@ -16,6 +16,7 @@ def test_create_student(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     student = create_student(client, headers)
     assert student["name"] == "Maria Silva"
+    assert student["address"] == "Rua das Flores, 100 - Centro"
 
     response = client.get("/students?search=Maria", headers=headers)
     assert response.status_code == 200
@@ -268,8 +269,8 @@ def test_overdue_payment_marks_student_as_defaulter(client: TestClient) -> None:
 def test_import_students_from_csv_and_records_audit(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     csv_content = (
-        "nome;telefone;email;plano;mensalidade;vencimento;status\n"
-        "Joao Importado;11911112222;joao@example.com;Mensal;99,90;5;ATIVO\n"
+        "nome;telefone;email;endereco;plano;mensalidade;vencimento;status\n"
+        "Joao Importado;11911112222;joao@example.com;Rua Importada, 45 - Centro;Mensal;99,90;5;ATIVO\n"
     )
     response = client.post(
         "/students/import",
@@ -282,6 +283,7 @@ def test_import_students_from_csv_and_records_audit(client: TestClient) -> None:
     students = client.get("/students?search=Importado", headers=headers)
     assert students.status_code == 200
     assert students.json()[0]["monthly_fee"] == "99.90"
+    assert students.json()[0]["address"] == "Rua Importada, 45 - Centro"
 
     audit = client.get("/audit-logs?entity_type=STUDENT&action=IMPORT", headers=headers)
     assert audit.status_code == 200

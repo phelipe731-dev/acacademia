@@ -115,6 +115,7 @@ def test_training_plan_exercise_can_be_edited_and_plan_can_be_cloned(client: Tes
             "phone": "11988887777",
             "email": "destino@example.com",
             "cpf": None,
+            "address": "Rua Destino, 200 - Centro",
             "birth_date": None,
             "plan": "Mensal",
             "monthly_fee": 120,
