@@ -229,6 +229,70 @@ def test_sale_on_credit_creates_future_invoice_and_allows_specific_payment(clien
     assert history.json()[0]["installments"][0]["status"] == "PAGA"
 
 
+def test_sale_on_credit_accepts_individual_due_dates(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+    product = create_product(client, headers, stock=5)
+    due_dates = [date.today() + timedelta(days=7), date.today() + timedelta(days=20), date.today() + timedelta(days=45)]
+
+    response = client.post(
+        "/sales",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "payment_method": "PRAZO",
+            "installments_count": 3,
+            "installment_payment_method": "PIX",
+            "installment_due_dates": [str(day) for day in due_dates],
+            "notes": "Datas combinadas manualmente",
+            "items": [{"product_id": product["id"], "quantity": 1}],
+        },
+    )
+    assert response.status_code == 201, response.text
+    installments = response.json()["installments"]
+    assert [item["due_date"] for item in installments] == [str(day) for day in due_dates]
+
+
+def test_admin_can_cancel_sale_and_restore_stock_and_invoices(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+    product = create_product(client, headers, stock=5)
+
+    sale = client.post(
+        "/sales",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "payment_method": "PRAZO",
+            "installments_count": 2,
+            "installment_payment_method": "PIX",
+            "installment_due_dates": [str(date.today()), str(date.today() + timedelta(days=30))],
+            "notes": "Venda a cancelar",
+            "items": [{"product_id": product["id"], "quantity": 2}],
+        },
+    )
+    assert sale.status_code == 201, sale.text
+    assert client.get(f"/products/{product['id']}", headers=headers).json()["stock_quantity"] == 3
+
+    canceled = client.patch(
+        f"/sales/{sale.json()['id']}/cancel",
+        headers=headers,
+        json={"reason": "Lancamento incorreto"},
+    )
+    assert canceled.status_code == 200, canceled.text
+    assert canceled.json()["status"] == "CANCELADA"
+    assert canceled.json()["cancel_reason"] == "Lancamento incorreto"
+    assert all(item["status"] == "CANCELADA" for item in canceled.json()["installments"])
+    assert client.get(f"/products/{product['id']}", headers=headers).json()["stock_quantity"] == 5
+
+    sales_report = client.get("/reports/sales", headers=headers)
+    assert sales_report.status_code == 200
+    assert sales_report.json() == []
+
+    second_cancel = client.patch(f"/sales/{sale.json()['id']}/cancel", headers=headers, json={"reason": None})
+    assert second_cancel.status_code == 400
+
+
 def test_sale_blocks_when_stock_is_insufficient(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     student = create_student(client, headers)

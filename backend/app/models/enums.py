@@ -35,6 +35,11 @@ class SalePaymentMethod(str, Enum):
     PRAZO = "PRAZO"
 
 
+class SaleStatus(str, Enum):
+    CONCLUIDA = "CONCLUIDA"
+    CANCELADA = "CANCELADA"
+
+
 class SaleInstallmentStatus(str, Enum):
     ABERTA = "ABERTA"
     PAGA = "PAGA"

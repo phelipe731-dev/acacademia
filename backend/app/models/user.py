@@ -31,7 +31,7 @@ class User(Base):
 
     payments = relationship("Payment", back_populates="created_by")
     stock_movements = relationship("StockMovement", back_populates="created_by")
-    sales = relationship("Sale", back_populates="created_by")
+    sales = relationship("Sale", foreign_keys="Sale.created_by_id", back_populates="created_by")
     training_plans = relationship("TrainingPlan", back_populates="created_by")
     training_media = relationship("TrainingPlanExerciseMedia", back_populates="created_by")
     training_share_links = relationship("TrainingPlanShareLink", back_populates="created_by")

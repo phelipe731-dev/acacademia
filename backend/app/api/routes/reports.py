@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.core.tz import business_today, day_after_utc, day_start_utc
 from app.db.session import get_db
-from app.models.enums import PaymentStatus, ProductStatus, UserRole
+from app.models.enums import PaymentStatus, ProductStatus, SaleStatus, UserRole
 from app.models.payment import Payment
 from app.models.product import Product
 from app.models.sale import Sale, SaleItem
@@ -189,6 +189,7 @@ def sales_report(
         .outerjoin(Student, Student.id == Sale.student_id)
         .outerjoin(User, User.id == Sale.created_by_id)
         .where(
+            Sale.status == SaleStatus.CONCLUIDA,
             Sale.created_at >= day_start_utc(start),
             Sale.created_at < day_after_utc(end),
         )
@@ -265,6 +266,7 @@ def top_products_report(
         .join(SaleItem, SaleItem.product_id == Product.id)
         .join(Sale, Sale.id == SaleItem.sale_id)
         .where(
+            Sale.status == SaleStatus.CONCLUIDA,
             Sale.created_at >= day_start_utc(start),
             Sale.created_at < day_after_utc(end),
         )
@@ -347,6 +349,7 @@ def revenue_report(
     ) or Decimal("0.00")
     sales_total = db.scalar(
         select(func.coalesce(func.sum(Sale.total_amount), Decimal("0.00"))).where(
+            Sale.status == SaleStatus.CONCLUIDA,
             Sale.created_at >= day_start_utc(start),
             Sale.created_at < day_after_utc(end),
         )

@@ -455,10 +455,11 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     [payments]
   );
   const overduePayments = useMemo(() => payments.filter((payment) => payment.status === "ATRASADO"), [payments]);
-  const installmentSales = useMemo(() => sales.filter((sale) => sale.payment_method === "PRAZO"), [sales]);
+  const activeSales = useMemo(() => sales.filter((sale) => (sale.status ?? "CONCLUIDA") !== "CANCELADA"), [sales]);
+  const installmentSales = useMemo(() => activeSales.filter((sale) => sale.payment_method === "PRAZO"), [activeSales]);
   const saleInstallments = useMemo<SaleInstallmentEntry[]>(
-    () => sales.flatMap((sale) => (sale.installments ?? []).map((installment) => ({ sale, installment }))),
-    [sales]
+    () => activeSales.flatMap((sale) => (sale.installments ?? []).map((installment) => ({ sale, installment }))),
+    [activeSales]
   );
   const openSaleInstallments = useMemo(
     () => saleInstallments.filter(({ installment }) => installment.status === "ABERTA" || installment.status === "ATRASADA"),
@@ -471,7 +472,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
   const openPaymentsTotal = useMemo(() => sumMoney(openPayments, (payment) => payment.amount), [openPayments]);
   const openSaleInstallmentsTotal = useMemo(() => sumMoney(openSaleInstallments, ({ installment }) => installment.amount), [openSaleInstallments]);
   const openFinancialTotal = openPaymentsTotal + openSaleInstallmentsTotal;
-  const salesTotal = useMemo(() => sumMoney(sales, (sale) => sale.total_amount), [sales]);
+  const salesTotal = useMemo(() => sumMoney(activeSales, (sale) => sale.total_amount), [activeSales]);
   const monthCheckins = useMemo(() => checkins.filter((checkin) => isWithinCurrentMonth(checkin.checked_in_at)), [checkins]);
   const last30Checkins = useMemo(() => checkins.filter((checkin) => isWithinLastDays(checkin.checked_in_at, 30)), [checkins]);
   const latestPaidPayment = useMemo(
@@ -590,10 +591,10 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       items.push({
         key: `sale-${sale.id}`,
         icon: ShoppingBag,
-        title: sale.payment_method === "PRAZO" ? "Venda parcelada registrada" : "Produto vendido",
+        title: (sale.status ?? "CONCLUIDA") === "CANCELADA" ? "Venda cancelada" : sale.payment_method === "PRAZO" ? "Venda parcelada registrada" : "Produto vendido",
         description: `${formatMoney(sale.total_amount)} - ${saleItemsLabel(sale) || salePaymentLabel(sale)}`,
-        at: sale.created_at,
-        tone: "orange"
+        at: sale.canceled_at || sale.created_at,
+        tone: (sale.status ?? "CONCLUIDA") === "CANCELADA" ? "red" : "orange"
       });
     });
     if (student.updated_at && student.updated_at !== student.created_at) {
@@ -623,6 +624,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       notes: payment.notes
     }));
     sales.forEach((sale) => {
+      const saleStatus = sale.status ?? "CONCLUIDA";
       if (sale.payment_method === "PRAZO" && sale.installments?.length) {
         sale.installments.forEach((installment) => {
           const method = installment.payment_method || sale.installment_payment_method || "PRAZO";
@@ -638,7 +640,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
             description: `Parcela ${installment.installment_number}/${sale.installments_count} - ${saleItemsLabel(sale) || `Venda #${sale.id}`}`,
             notes: installment.notes || sale.notes,
             saleInstallmentId: installment.id,
-            canPay: installment.status === "ABERTA" || installment.status === "ATRASADA"
+            canPay: saleStatus !== "CANCELADA" && (installment.status === "ABERTA" || installment.status === "ATRASADA")
           });
         });
         return;
@@ -648,7 +650,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
         date: sale.created_at,
         amount: sale.total_amount,
         method: sale.payment_method,
-        status: sale.payment_method === "PRAZO" ? "PRAZO" : "PAGO",
+        status: saleStatus === "CANCELADA" ? "CANCELADA" : sale.payment_method === "PRAZO" ? "PRAZO" : "PAGO",
         type: sale.payment_method === "PRAZO" ? "PRAZO" : "VENDA",
         description: saleItemsLabel(sale) || `Venda #${sale.id}`,
         notes: sale.notes

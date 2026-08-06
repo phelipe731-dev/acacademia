@@ -3,18 +3,28 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.tz import business_today
-from app.models.enums import ProductStatus, SaleInstallmentStatus, SalePaymentMethod, StockMovementType, StudentStatus
+from app.models.enums import PaymentStatus, ProductStatus, SaleInstallmentStatus, SalePaymentMethod, SaleStatus, StockMovementType, StudentStatus
+from app.models.payment import Payment
 from app.models.product import Product
-from app.models.sale import Sale, SaleInstallment, SaleItem
+from app.models.sale import Sale, SaleInstallment, SaleItem, utcnow
 from app.models.stock import StockMovement
 from app.models.student import Student
 from app.models.user import User
 from app.schemas.sale import SaleCreate
 from app.services.audit import model_snapshot, record_audit
+
+
+def sale_load_options():
+    return (
+        selectinload(Sale.items).selectinload(SaleItem.product),
+        selectinload(Sale.installments),
+        selectinload(Sale.created_by),
+        selectinload(Sale.student),
+    )
 
 
 def add_months(day: date, months: int) -> date:
@@ -63,6 +73,9 @@ def create_sale_installments(db: Session, sale: Sale, payload: SaleCreate) -> li
         return []
 
     amounts = split_installment_amounts(sale.total_amount, payload.installments_count)
+    due_dates = payload.installment_due_dates or [
+        add_months(payload.first_due_date, index) for index in range(payload.installments_count)
+    ]
     today = business_today()
     installments: list[SaleInstallment] = []
     for index, amount in enumerate(amounts, start=1):
@@ -71,7 +84,7 @@ def create_sale_installments(db: Session, sale: Sale, payload: SaleCreate) -> li
             student_id=sale.student_id,
             installment_number=index,
             amount=amount,
-            due_date=add_months(payload.first_due_date, index - 1),
+            due_date=due_dates[index - 1],
             paid_at=None,
             status=SaleInstallmentStatus.ABERTA,
             payment_method=None,
@@ -81,6 +94,24 @@ def create_sale_installments(db: Session, sale: Sale, payload: SaleCreate) -> li
         db.add(installment)
         installments.append(installment)
     return installments
+
+
+def update_student_status_after_sale_change(db: Session, student: Student | None) -> None:
+    if student is None or student.status == StudentStatus.INATIVO:
+        return
+    overdue_payments = db.scalar(
+        select(func.count(Payment.id)).where(
+            Payment.student_id == student.id,
+            Payment.status == PaymentStatus.ATRASADO,
+        )
+    )
+    overdue_sale_installments = db.scalar(
+        select(func.count(SaleInstallment.id)).where(
+            SaleInstallment.student_id == student.id,
+            SaleInstallment.status == SaleInstallmentStatus.ATRASADA,
+        )
+    )
+    student.status = StudentStatus.INADIMPLENTE if overdue_payments or overdue_sale_installments else StudentStatus.ATIVO
 
 
 def create_sale_with_stock(db: Session, payload: SaleCreate, current_user: User) -> Sale:
@@ -174,10 +205,62 @@ def create_sale_with_stock(db: Session, payload: SaleCreate, current_user: User)
     return db.scalars(
         select(Sale)
         .where(Sale.id == sale.id)
-        .options(
-            selectinload(Sale.items).selectinload(SaleItem.product),
-            selectinload(Sale.installments),
-            selectinload(Sale.created_by),
-            selectinload(Sale.student),
+        .options(*sale_load_options())
+    ).one()
+
+
+def cancel_sale_with_stock(db: Session, sale_id: int, current_user: User, reason: str | None = None) -> Sale:
+    sale = db.scalars(
+        select(Sale)
+        .where(Sale.id == sale_id)
+        .options(*sale_load_options())
+        .with_for_update()
+    ).one_or_none()
+    if sale is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Venda nao encontrada.")
+    if sale.status == SaleStatus.CANCELADA:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Venda ja cancelada.")
+
+    before = model_snapshot(sale)
+    for item in sale.items:
+        product = db.scalar(select(Product).where(Product.id == item.product_id).with_for_update())
+        if product is None:
+            continue
+        product.stock_quantity += item.quantity
+        db.add(
+            StockMovement(
+                product_id=product.id,
+                type=StockMovementType.ENTRADA,
+                quantity=item.quantity,
+                reason=f"Cancelamento venda #{sale.id}",
+                created_by_id=current_user.id,
+            )
         )
+
+    for installment in sale.installments:
+        installment.status = SaleInstallmentStatus.CANCELADA
+        installment.paid_at = None
+
+    sale.status = SaleStatus.CANCELADA
+    sale.canceled_at = utcnow()
+    sale.canceled_by_id = current_user.id
+    sale.cancel_reason = reason
+    db.flush()
+    update_student_status_after_sale_change(db, sale.student)
+    db.flush()
+    record_audit(
+        db,
+        current_user,
+        entity_type="SALE",
+        entity_id=sale.id,
+        action="CANCEL",
+        summary=f"Venda cancelada #{sale.id}.",
+        before=before,
+        after=model_snapshot(sale),
+    )
+    db.commit()
+    return db.scalars(
+        select(Sale)
+        .where(Sale.id == sale.id)
+        .options(*sale_load_options())
     ).one()

@@ -1,11 +1,11 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.enums import PaymentMethod, SaleInstallmentStatus, SalePaymentMethod
+from app.models.enums import PaymentMethod, SaleInstallmentStatus, SalePaymentMethod, SaleStatus
 
 
 def utcnow() -> datetime:
@@ -26,13 +26,23 @@ class Sale(Base):
         Enum(PaymentMethod, name="sale_installment_payment_method", native_enum=False),
         nullable=True,
     )
+    status: Mapped[SaleStatus] = mapped_column(
+        Enum(SaleStatus, name="sale_status", native_enum=False),
+        default=SaleStatus.CONCLUIDA,
+        index=True,
+        nullable=False,
+    )
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True, nullable=False)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    canceled_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    cancel_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     student = relationship("Student", back_populates="sales")
-    created_by = relationship("User", back_populates="sales")
+    created_by = relationship("User", foreign_keys=[created_by_id], back_populates="sales")
+    canceled_by = relationship("User", foreign_keys=[canceled_by_id])
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
     installments = relationship("SaleInstallment", back_populates="sale", cascade="all, delete-orphan")
 

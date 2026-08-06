@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.core.tz import business_today, day_start_utc, to_business_date
 from app.db.session import get_db
-from app.models.enums import PaymentStatus, ProductStatus, StudentStatus, UserRole
+from app.models.enums import PaymentStatus, ProductStatus, SaleStatus, StudentStatus, UserRole
 from app.models.payment import Payment
 from app.models.product import Product
 from app.models.sale import Sale, SaleItem
@@ -54,6 +54,7 @@ def read_dashboard(
     overdue_payments = db.scalar(select(func.count(Payment.id)).where(Payment.status == PaymentStatus.ATRASADO)) or 0
     sales_month = db.scalar(
         select(func.coalesce(func.sum(Sale.total_amount), Decimal("0.00"))).where(
+            Sale.status == SaleStatus.CONCLUIDA,
             Sale.created_at >= start,
             Sale.created_at < end,
         )
@@ -75,7 +76,7 @@ def read_dashboard(
         )
         .join(SaleItem, SaleItem.product_id == Product.id)
         .join(Sale, Sale.id == SaleItem.sale_id)
-        .where(Sale.created_at >= start, Sale.created_at < end)
+        .where(Sale.status == SaleStatus.CONCLUIDA, Sale.created_at >= start, Sale.created_at < end)
         .group_by(Product.id, Product.name)
         .order_by(desc("qty"))
         .limit(5)
@@ -116,7 +117,11 @@ def read_dashboard(
     # em vez de func.date() do banco, que usaria a data em UTC.
     sale_points: dict[str, Decimal] = {}
     for created_at, total_amount in db.execute(
-        select(Sale.created_at, Sale.total_amount).where(Sale.created_at >= start, Sale.created_at < end)
+        select(Sale.created_at, Sale.total_amount).where(
+            Sale.status == SaleStatus.CONCLUIDA,
+            Sale.created_at >= start,
+            Sale.created_at < end,
+        )
     ).all():
         key = to_business_date(created_at).isoformat()
         sale_points[key] = sale_points.get(key, Decimal("0.00")) + total_amount

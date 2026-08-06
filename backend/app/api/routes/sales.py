@@ -2,18 +2,24 @@ from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
 from app.core.tz import business_today
 from app.db.session import get_db
-from app.models.enums import PaymentMethod, SaleInstallmentStatus, UserRole
-from app.models.sale import Sale, SaleInstallment, SaleItem
+from app.models.enums import PaymentMethod, SaleInstallmentStatus, SaleStatus, UserRole
+from app.models.sale import Sale, SaleInstallment
 from app.models.user import User
-from app.schemas.sale import SaleCreate, SaleInstallmentPay, SaleInstallmentRead, SaleRead
+from app.schemas.sale import SaleCancel, SaleCreate, SaleInstallmentPay, SaleInstallmentRead, SaleRead
 from app.services.audit import model_snapshot, record_audit
 from app.services.payments import update_student_status_from_payments
-from app.services.sales import create_sale_with_stock, normalize_sale_installment_status, refresh_overdue_sale_installments
+from app.services.sales import (
+    cancel_sale_with_stock,
+    create_sale_with_stock,
+    normalize_sale_installment_status,
+    refresh_overdue_sale_installments,
+    sale_load_options,
+)
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
@@ -28,12 +34,7 @@ def list_sales(
 ) -> list[Sale]:
     stmt = (
         select(Sale)
-        .options(
-            selectinload(Sale.items).selectinload(SaleItem.product),
-            selectinload(Sale.installments),
-            selectinload(Sale.created_by),
-            selectinload(Sale.student),
-        )
+        .options(*sale_load_options())
         .order_by(Sale.created_at.desc())
     )
     if start_date:
@@ -90,6 +91,8 @@ def pay_sale_installment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fatura da venda nao encontrada.")
     if installment.status == SaleInstallmentStatus.CANCELADA:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Fatura cancelada nao pode ser paga.")
+    if installment.sale.status == SaleStatus.CANCELADA:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Venda cancelada nao pode receber pagamento.")
 
     before = model_snapshot(installment)
     installment.status = SaleInstallmentStatus.PAGA
@@ -119,3 +122,13 @@ def pay_sale_installment(
     db.commit()
     db.refresh(installment)
     return installment
+
+
+@router.patch("/{sale_id}/cancel", response_model=SaleRead)
+def cancel_sale(
+    sale_id: int,
+    payload: SaleCancel,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+) -> Sale:
+    return cancel_sale_with_stock(db, sale_id, current_user, payload.reason)

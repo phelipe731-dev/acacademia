@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.enums import PaymentMethod, SaleInstallmentStatus, SalePaymentMethod
+from app.models.enums import PaymentMethod, SaleInstallmentStatus, SalePaymentMethod, SaleStatus
 from app.schemas.product import ProductRead
 from app.schemas.student import StudentRead
 from app.schemas.user import UserRead
@@ -20,6 +20,7 @@ class SaleCreate(BaseModel):
     installments_count: int = Field(default=1, ge=1, le=24)
     installment_payment_method: PaymentMethod | None = None
     first_due_date: date | None = None
+    installment_due_dates: list[date] | None = None
     notes: str | None = None
     items: list[SaleItemCreate] = Field(min_length=1)
 
@@ -28,12 +29,17 @@ class SaleCreate(BaseModel):
         if self.payment_method == SalePaymentMethod.PRAZO:
             if self.installment_payment_method is None:
                 raise ValueError("Informe a forma combinada para as parcelas.")
-            if self.first_due_date is None:
-                raise ValueError("Informe o vencimento da primeira parcela.")
+            if self.installment_due_dates is not None:
+                if len(self.installment_due_dates) != self.installments_count:
+                    raise ValueError("Informe um vencimento para cada parcela.")
+                self.first_due_date = self.installment_due_dates[0]
+            elif self.first_due_date is None:
+                raise ValueError("Informe o vencimento das parcelas.")
         else:
             self.installments_count = 1
             self.installment_payment_method = None
             self.first_due_date = None
+            self.installment_due_dates = None
         return self
 
 
@@ -71,16 +77,24 @@ class SaleInstallmentPay(BaseModel):
     notes: str | None = None
 
 
+class SaleCancel(BaseModel):
+    reason: str | None = None
+
+
 class SaleRead(BaseModel):
     id: int
     student_id: int | None
     payment_method: SalePaymentMethod
     installments_count: int
     installment_payment_method: PaymentMethod | None = None
+    status: SaleStatus
     total_amount: Decimal
     notes: str | None
     created_by_id: int | None
     created_at: datetime
+    canceled_at: datetime | None = None
+    canceled_by_id: int | None = None
+    cancel_reason: str | None = None
     items: list[SaleItemRead] = []
     installments: list[SaleInstallmentRead] = []
     student: StudentRead | None = None
