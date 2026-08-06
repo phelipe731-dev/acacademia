@@ -339,7 +339,9 @@ export default function StudentsPage() {
       });
       setMessage({ text: "Aluno cadastrado.", type: "success" });
       closeStudentModal(true);
-      await loadStudents();
+      void loadStudents().catch((error) => {
+        setMessage({ text: getErrorMessage(error, "Aluno cadastrado, mas houve erro ao atualizar a lista."), type: "error" });
+      });
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao cadastrar aluno."), type: "error" });
     } finally {
@@ -959,14 +961,14 @@ function ModalShell({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 px-3 py-3 sm:items-center sm:px-5 sm:py-6"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 px-3 py-3 sm:px-5 sm:py-6"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <section
-        className={`flex max-h-[calc(100dvh-1.5rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-[0_24px_70px_rgba(0,0,0,0.28)]`}
+        className={`my-auto flex max-h-[calc(100dvh-1.5rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:max-h-[calc(100dvh-3rem)]`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="student-modal-title"

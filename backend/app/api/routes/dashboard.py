@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
@@ -15,6 +15,7 @@ from app.models.sale import Sale, SaleItem
 from app.models.student import Student
 from app.models.user import User
 from app.schemas.dashboard import DashboardRead, RevenuePoint, TopProduct
+from app.schemas.engagement import BirthdayRow, ExpiringPlanRow
 from app.services.payments import refresh_all_student_statuses
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -92,6 +93,25 @@ def read_dashboard(
             .group_by(Payment.paid_at)
         ).all()
     }
+    today = business_today()
+    expiring_limit = today + timedelta(days=15)
+    expiring_rows = db.scalars(
+        select(Student)
+        .where(
+            Student.status != StudentStatus.INATIVO,
+            Student.plan_end_date.is_not(None),
+            Student.plan_end_date <= expiring_limit,
+        )
+        .order_by(Student.plan_end_date)
+    ).all()
+    birthday_students = db.scalars(
+        select(Student).where(
+            Student.status != StudentStatus.INATIVO,
+            Student.birth_date.is_not(None),
+            func.extract("month", Student.birth_date) == today.month,
+        )
+    ).all()
+
     # Agrupa as vendas por data LOCAL de negocio (o instante e convertido em Python),
     # em vez de func.date() do banco, que usaria a data em UTC.
     sale_points: dict[str, Decimal] = {}
@@ -101,7 +121,6 @@ def read_dashboard(
         key = to_business_date(created_at).isoformat()
         sale_points[key] = sale_points.get(key, Decimal("0.00")) + total_amount
 
-    today = business_today()
     same_month = today.year == start_day.year and today.month == start_day.month
     days_in_scope = today.day if same_month else (end_day - start_day).days
     revenue_points: list[RevenuePoint] = []
@@ -132,4 +151,28 @@ def read_dashboard(
         low_stock_products=low_stock_products,
         top_products=[TopProduct(product_id=row[0], name=row[1], quantity=row[2], total=row[3]) for row in top_rows],
         revenue_points=revenue_points,
+        birthdays=sorted(
+            [
+                BirthdayRow(
+                    student_id=student.id,
+                    name=student.name,
+                    phone=student.phone,
+                    birth_date=student.birth_date,
+                    day=student.birth_date.day,
+                )
+                for student in birthday_students
+            ],
+            key=lambda row: row.day,
+        ),
+        expiring_plans=[
+            ExpiringPlanRow(
+                student_id=student.id,
+                name=student.name,
+                phone=student.phone,
+                plan=student.plan,
+                plan_end_date=student.plan_end_date,
+                days_left=(student.plan_end_date - today).days,
+            )
+            for student in expiring_rows
+        ],
     )

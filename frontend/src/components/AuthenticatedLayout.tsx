@@ -55,6 +55,8 @@ export function AuthenticatedLayout({ children }: { children: React.ReactNode })
       router.replace("/login");
       return;
     }
+    setUser(session.user);
+    setLoading(false);
     apiFetch<User>("/auth/me")
       .then((me) => {
         saveProfile(me);
@@ -63,8 +65,7 @@ export function AuthenticatedLayout({ children }: { children: React.ReactNode })
       .catch(() => {
         clearSession();
         router.replace("/login");
-      })
-      .finally(() => setLoading(false));
+      });
   }, [router]);
 
   // Menu mobile: fecha com Escape, trava o scroll do fundo e foca o painel.

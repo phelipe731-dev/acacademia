@@ -1,7 +1,8 @@
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app.schemas.engagement import BirthdayRow, ExpiringPlanRow
 from app.schemas.product import ProductRead
 
 
@@ -29,3 +30,5 @@ class DashboardRead(BaseModel):
     low_stock_products: list[ProductRead]
     top_products: list[TopProduct]
     revenue_points: list[RevenuePoint]
+    birthdays: list[BirthdayRow] = Field(default_factory=list)
+    expiring_plans: list[ExpiringPlanRow] = Field(default_factory=list)

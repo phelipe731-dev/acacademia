@@ -1,7 +1,7 @@
 import calendar
 from datetime import date
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.enums import PaymentMethod, PaymentStatus, StudentStatus
@@ -47,9 +47,24 @@ def update_student_status_from_payments(db: Session, student_id: int) -> None:
 
 def refresh_all_student_statuses(db: Session) -> None:
     refresh_overdue_payments(db)
-    student_ids = db.scalars(select(Student.id)).all()
-    for student_id in student_ids:
-        update_student_status_from_payments(db, student_id)
+    overdue_exists = (
+        select(Payment.id)
+        .where(
+            Payment.student_id == Student.id,
+            Payment.status == PaymentStatus.ATRASADO,
+        )
+        .exists()
+    )
+    db.execute(
+        update(Student)
+        .where(Student.status != StudentStatus.INATIVO)
+        .values(
+            status=case(
+                (overdue_exists, StudentStatus.INADIMPLENTE),
+                else_=StudentStatus.ATIVO,
+            )
+        )
+    )
 
 
 def due_date_for_month(year: int, month: int, due_day: int) -> date:

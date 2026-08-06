@@ -163,6 +163,8 @@ export interface Dashboard {
   low_stock_products: Product[];
   top_products: TopProduct[];
   revenue_points: RevenuePoint[];
+  birthdays: BirthdayRow[];
+  expiring_plans: ExpiringPlanRow[];
 }
 
 export interface DefaulterReportRow {

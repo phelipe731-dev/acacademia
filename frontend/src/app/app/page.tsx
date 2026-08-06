@@ -15,24 +15,16 @@ import { useEffect, useState } from "react";
 import { Message } from "@/components/Message";
 import { EmptyState, PageHeader, SkeletonRows, getErrorMessage } from "@/components/ui";
 import { apiFetch, formatDate, formatMoney } from "@/lib/api";
-import type { BirthdayRow, Dashboard, ExpiringPlanRow } from "@/lib/types";
+import type { Dashboard } from "@/lib/types";
 
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [birthdays, setBirthdays] = useState<BirthdayRow[]>([]);
-  const [expiring, setExpiring] = useState<ExpiringPlanRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<Dashboard>("/dashboard")
       .then(setDashboard)
       .catch((err) => setError(getErrorMessage(err, "Erro ao carregar o dashboard.")));
-    apiFetch<BirthdayRow[]>("/students/birthdays")
-      .then(setBirthdays)
-      .catch(() => setBirthdays([]));
-    apiFetch<ExpiringPlanRow[]>("/students/expiring-plans?days=15")
-      .then(setExpiring)
-      .catch(() => setExpiring([]));
   }, []);
 
   if (error) return <Message message={error} type="error" />;
@@ -197,10 +189,10 @@ export default function DashboardPage() {
             <CalendarClock className="h-5 w-5 text-brand" aria-hidden /> Planos vencendo (15 dias)
           </h2>
           <div className="mt-4 space-y-2">
-            {expiring.length === 0 ? (
+            {dashboard.expiring_plans.length === 0 ? (
               <EmptyState icon={CalendarClock} title="Nenhum plano vencendo em breve" />
             ) : (
-              expiring.map((row) => (
+              dashboard.expiring_plans.map((row) => (
                 <div
                   key={row.student_id}
                   className="flex items-center justify-between rounded-lg border border-line px-3.5 py-3 transition hover:bg-paper/70"
@@ -229,10 +221,10 @@ export default function DashboardPage() {
             <Cake className="h-5 w-5 text-brand" aria-hidden /> Aniversariantes do mes
           </h2>
           <div className="mt-4 space-y-2">
-            {birthdays.length === 0 ? (
+            {dashboard.birthdays.length === 0 ? (
               <EmptyState icon={Cake} title="Nenhum aniversariante neste mes" />
             ) : (
-              birthdays.map((row) => (
+              dashboard.birthdays.map((row) => (
                 <div
                   key={row.student_id}
                   className="flex items-center justify-between rounded-lg border border-line px-3.5 py-3 transition hover:bg-paper/70"
