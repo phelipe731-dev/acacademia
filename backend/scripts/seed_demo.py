@@ -110,6 +110,7 @@ def upsert_students(db: Session) -> list[Student]:
                 address=address,
                 birth_date=None,
                 plan=plan,
+                plan_start_date=today - timedelta(days=60 + index * 4),
                 plan_end_date=today + timedelta(days=45 + index * 3),
                 monthly_fee=fee,
                 due_day=due_day,
@@ -123,6 +124,7 @@ def upsert_students(db: Session) -> list[Student]:
             student.email = email
             student.address = address
             student.plan = plan
+            student.plan_start_date = student.plan_start_date or (today - timedelta(days=60 + index * 4))
             student.plan_end_date = student.plan_end_date or (today + timedelta(days=45 + index * 3))
             student.monthly_fee = fee
             student.due_day = due_day

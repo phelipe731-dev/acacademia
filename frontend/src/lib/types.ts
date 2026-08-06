@@ -32,6 +32,7 @@ export interface Student {
   address?: string | null;
   birth_date?: string | null;
   plan: string;
+  plan_start_date?: string | null;
   plan_end_date?: string | null;
   monthly_fee: string;
   due_day: number;

@@ -36,6 +36,14 @@ HEADER_ALIASES = {
     "birth_date": "birth_date",
     "plano": "plan",
     "plan": "plan",
+    "data_inicio": "plan_start_date",
+    "data_início": "plan_start_date",
+    "inicio": "plan_start_date",
+    "início": "plan_start_date",
+    "inicio_plano": "plan_start_date",
+    "início_plano": "plan_start_date",
+    "data_inicio_plano": "plan_start_date",
+    "plan_start_date": "plan_start_date",
     "mensalidade": "monthly_fee",
     "valor_mensalidade": "monthly_fee",
     "monthly_fee": "monthly_fee",
@@ -100,6 +108,7 @@ def map_row(raw: dict[str, Any]) -> dict[str, Any]:
     mapped["cpf"] = mapped.get("cpf") or None
     mapped["address"] = mapped.get("address") or None
     mapped["birth_date"] = parse_date(mapped.get("birth_date"))
+    mapped["plan_start_date"] = parse_date(mapped.get("plan_start_date"))
     mapped["monthly_fee"] = parse_decimal(mapped.get("monthly_fee"))
     mapped["due_day"] = int(mapped.get("due_day") or 1)
     mapped["status"] = str(mapped.get("status") or "ATIVO").upper()

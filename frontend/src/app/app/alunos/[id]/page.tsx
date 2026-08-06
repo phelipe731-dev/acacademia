@@ -302,6 +302,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
           address: student.address?.trim() || null,
           birth_date: student.birth_date || null,
           plan: student.plan,
+          plan_start_date: dateInputValue(student.plan_start_date || student.created_at) || null,
           plan_end_date: student.plan_end_date || null,
           monthly_fee: Number(student.monthly_fee),
           due_day: student.due_day,
@@ -908,7 +909,7 @@ function StudentProfileSummary({ student, setActiveTab }: { student: Student; se
         <ProfileInfo icon={Phone} label="Telefone" value={formatPhone(student.phone)} />
         <ProfileInfo icon={Calendar} label="Plano" value={student.plan} />
         <ProfileInfo icon={Mail} label="E-mail" value={student.email || "-"} />
-        <ProfileInfo icon={CalendarCheck} label="Inicio do plano" value={formatDate(student.created_at)} />
+        <ProfileInfo icon={CalendarCheck} label="Inicio do plano" value={formatDate(student.plan_start_date || student.created_at)} />
         <ProfileInfo icon={UserRound} label="CPF" value={formatCpf(student.cpf)} />
         <ProfileInfo icon={CalendarClock} label="Fim do plano" value={formatDate(student.plan_end_date)} />
         <ProfileInfo icon={Calendar} label="Nascimento" value={formatDate(student.birth_date)} />
@@ -1549,7 +1550,14 @@ function RegistrationTab({
             </select>
           </Field>
           <Field label="Inicio do plano" id="edit-plan-start">
-            <input id="edit-plan-start" className="field" disabled value={dateInputValue(student.created_at)} type="date" />
+            <input
+              id="edit-plan-start"
+              className="field"
+              disabled={readOnly}
+              type="date"
+              value={dateInputValue(student.plan_start_date || student.created_at)}
+              onChange={(event) => setStudent({ ...student, plan_start_date: event.target.value })}
+            />
           </Field>
           <Field label="Fim do plano" id="edit-plan-end">
             <input

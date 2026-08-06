@@ -152,7 +152,7 @@ Incluido:
 
 - Login com JWT e senha com hash seguro
 - ADMIN, RECEPCAO e PROFESSOR com permissoes aplicadas no backend
-- Cadastro, busca, detalhe e historico financeiro de alunos, com endereco no cadastro
+- Cadastro, busca, detalhe e historico financeiro de alunos, com endereco e data de inicio do plano
 - Registro de mensalidades e pagamentos
 - Inadimplencia calculada por pagamentos vencidos
 - Cadastro de produtos e controle de estoque
@@ -163,8 +163,8 @@ Incluido:
 - Graficos simples no dashboard
 - Relatorios simples por periodo
 - Exportacao CSV autenticada em todos os relatorios
-- Importacao de alunos por CSV/XLSX, incluindo coluna `endereco`
-- Geracao automatica mensal de mensalidades para alunos ativos
+- Importacao de alunos por CSV/XLSX, incluindo colunas `endereco` e `data_inicio`
+- Geracao automatica mensal de mensalidades para alunos ativos, respeitando a data de inicio do plano
 - Auditoria basica de alteracoes sensiveis
 - Fichas de treino digitais vinculadas ao aluno
 - Exercicios por ficha com series, repeticoes, carga, descanso e observacoes

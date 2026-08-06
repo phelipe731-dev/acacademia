@@ -118,6 +118,7 @@ def test_training_plan_exercise_can_be_edited_and_plan_can_be_cloned(client: Tes
             "address": "Rua Destino, 200 - Centro",
             "birth_date": None,
             "plan": "Mensal",
+            "plan_start_date": "2026-07-01",
             "monthly_fee": 120,
             "due_day": 10,
             "status": "ATIVO",

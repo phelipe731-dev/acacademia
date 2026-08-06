@@ -80,6 +80,8 @@ def generate_monthly_payments(db: Session, current_user: User, year: int, month:
 
     for student in students:
         due_date = due_date_for_month(year, month, student.due_day)
+        if student.plan_start_date and due_date < student.plan_start_date:
+            continue
         exists = db.scalar(
             select(Payment.id).where(
                 Payment.student_id == student.id,

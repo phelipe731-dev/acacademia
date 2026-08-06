@@ -23,6 +23,7 @@ class Student(Base):
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     plan: Mapped[str] = mapped_column(String(120), nullable=False)
+    plan_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     plan_end_date: Mapped[date | None] = mapped_column(Date, index=True, nullable=True)
     monthly_fee: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     due_day: Mapped[int] = mapped_column(Integer, nullable=False)

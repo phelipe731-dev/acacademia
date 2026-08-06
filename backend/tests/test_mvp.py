@@ -17,6 +17,7 @@ def test_create_student(client: TestClient) -> None:
     student = create_student(client, headers)
     assert student["name"] == "Maria Silva"
     assert student["address"] == "Rua das Flores, 100 - Centro"
+    assert student["plan_start_date"] == "2026-07-01"
 
     response = client.get("/students?search=Maria", headers=headers)
     assert response.status_code == 200
@@ -269,8 +270,8 @@ def test_overdue_payment_marks_student_as_defaulter(client: TestClient) -> None:
 def test_import_students_from_csv_and_records_audit(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     csv_content = (
-        "nome;telefone;email;endereco;plano;mensalidade;vencimento;status\n"
-        "Joao Importado;11911112222;joao@example.com;Rua Importada, 45 - Centro;Mensal;99,90;5;ATIVO\n"
+        "nome;telefone;email;endereco;plano;data_inicio;mensalidade;vencimento;status\n"
+        "Joao Importado;11911112222;joao@example.com;Rua Importada, 45 - Centro;Mensal;15/06/2026;99,90;5;ATIVO\n"
     )
     response = client.post(
         "/students/import",
@@ -284,6 +285,7 @@ def test_import_students_from_csv_and_records_audit(client: TestClient) -> None:
     assert students.status_code == 200
     assert students.json()[0]["monthly_fee"] == "99.90"
     assert students.json()[0]["address"] == "Rua Importada, 45 - Centro"
+    assert students.json()[0]["plan_start_date"] == "2026-06-15"
 
     audit = client.get("/audit-logs?entity_type=STUDENT&action=IMPORT", headers=headers)
     assert audit.status_code == 200
@@ -308,6 +310,19 @@ def test_generate_monthly_payments_is_idempotent(client: TestClient) -> None:
     payments = client.get("/payments?status=PENDENTE", headers=headers)
     assert payments.status_code == 200
     assert len(payments.json()) == 1
+
+
+def test_generate_monthly_payments_respects_student_start_date(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    create_student(client, headers)
+
+    before_start = client.post("/payments/generate-monthly", headers=headers, json={"year": 2026, "month": 6})
+    assert before_start.status_code == 200, before_start.text
+    assert before_start.json()["generated"] == 0
+
+    after_start = client.post("/payments/generate-monthly", headers=headers, json={"year": 2026, "month": 7})
+    assert after_start.status_code == 200, after_start.text
+    assert after_start.json()["generated"] == 1
 
 
 def test_reports_csv_exports_and_audit_permissions(client: TestClient) -> None:

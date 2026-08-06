@@ -17,6 +17,7 @@ def _student_payload(**overrides) -> dict:
         "address": "Rua Teste, 123 - Centro",
         "birth_date": None,
         "plan": "Mensal",
+        "plan_start_date": "2026-07-01",
         "plan_end_date": None,
         "monthly_fee": 100,
         "due_day": 10,

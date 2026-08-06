@@ -21,11 +21,12 @@
 
 - Cadastro de aluno
 - Endereco solicitado no cadastro do aluno
+- Data de inicio do plano editavel para migracao de alunos antigos
 - Edicao e exclusao por ADMIN
 - Listagem com busca por nome/telefone
 - Filtro por status
 - Detalhe do aluno com historico financeiro
-- Importacao de alunos por arquivo `.csv` ou `.xlsx`, restrita ao ADMIN, com coluna `endereco`
+- Importacao de alunos por arquivo `.csv` ou `.xlsx`, restrita ao ADMIN, com colunas `endereco` e `data_inicio`
 - Retorno da importacao com total importado e erros por linha
 
 ### Mensalidades e pagamentos
@@ -38,6 +39,7 @@
 - Inadimplentes
 - Vencimentos proximos
 - Geracao automatica mensal para alunos ativos
+- Geracao respeita a data de inicio do plano do aluno
 - Geracao idempotente, sem duplicar mensalidade ja existente no mesmo vencimento
 
 ### Produtos e estoque

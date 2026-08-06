@@ -14,6 +14,7 @@ class StudentBase(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     birth_date: date | None = None
     plan: str = Field(min_length=2, max_length=120)
+    plan_start_date: date | None = None
     plan_end_date: date | None = None
     monthly_fee: Decimal = Field(ge=0)
     due_day: int = Field(ge=1, le=31)
@@ -38,6 +39,7 @@ class StudentUpdate(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     birth_date: date | None = None
     plan: str | None = Field(default=None, min_length=2, max_length=120)
+    plan_start_date: date | None = None
     plan_end_date: date | None = None
     monthly_fee: Decimal | None = Field(default=None, ge=0)
     due_day: int | None = Field(default=None, ge=1, le=31)

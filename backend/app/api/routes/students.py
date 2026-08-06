@@ -53,7 +53,9 @@ def create_student(
     db: Session = Depends(get_db),
 ) -> Student:
     ensure_student_is_unique(db, cpf=payload.cpf, email=payload.email)
-    student = Student(**payload.model_dump())
+    data = payload.model_dump()
+    data["plan_start_date"] = data.get("plan_start_date") or business_today()
+    student = Student(**data)
     db.add(student)
     db.flush()
     record_audit(
@@ -83,16 +85,16 @@ def inactive_students(
         .subquery()
     )
     rows = db.execute(
-        select(Student.id, Student.name, Student.phone, Student.created_at, last_checkin.c.last)
+        select(Student.id, Student.name, Student.phone, Student.created_at, Student.plan_start_date, last_checkin.c.last)
         .outerjoin(last_checkin, last_checkin.c.student_id == Student.id)
         .where(Student.status != StudentStatus.INATIVO)
     ).all()
 
     today = business_today()
     result: list[InactiveStudentRow] = []
-    for student_id, name, phone, created_at, last in rows:
-        # Baseline: ultimo check-in ou, se nunca veio, a data de cadastro.
-        baseline = to_business_date(last) if last is not None else to_business_date(created_at)
+    for student_id, name, phone, created_at, plan_start_date, last in rows:
+        # Baseline: ultimo check-in ou, se nunca veio, o inicio do plano/cadastro.
+        baseline = to_business_date(last) if last is not None else (plan_start_date or to_business_date(created_at))
         days_since = (today - baseline).days
         if days_since >= days:
             result.append(

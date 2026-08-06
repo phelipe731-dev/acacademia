@@ -36,6 +36,7 @@ interface StudentFormState {
   address: string;
   birth_date: string;
   plan: string;
+  plan_start_date: string;
   plan_end_date: string;
   monthly_fee: string;
   due_day: string;
@@ -68,6 +69,7 @@ function createEmptyStudentForm(): StudentFormState {
     address: "",
     birth_date: "",
     plan: "Mensal",
+    plan_start_date: dateToInputValue(todayStart()),
     plan_end_date: "",
     monthly_fee: "0",
     due_day: "10",
@@ -334,6 +336,7 @@ export default function StudentsPage() {
           address: form.address.trim(),
           birth_date: form.birth_date || null,
           plan: form.plan.trim(),
+          plan_start_date: form.plan_start_date || null,
           plan_end_date: form.plan_end_date || null,
           monthly_fee: Number(String(form.monthly_fee).replace(",", ".")),
           due_day: Number(form.due_day),
@@ -761,7 +764,14 @@ export default function StudentsPage() {
                 </div>
                 <div>
                   <label className="label" htmlFor="student-start-date">Data de inicio</label>
-                  <input id="student-start-date" className="field h-11" type="date" value={dateToInputValue(todayStart())} readOnly disabled />
+                  <input
+                    id="student-start-date"
+                    className="field h-11"
+                    type="date"
+                    value={form.plan_start_date}
+                    onChange={(event) => setForm({ ...form, plan_start_date: event.target.value })}
+                    required
+                  />
                 </div>
                 <div>
                   <label className="label" htmlFor="student-plan-end">Data fim do plano</label>
@@ -820,7 +830,7 @@ export default function StudentsPage() {
               {importFile ? <p className="mt-2 text-sm font-semibold text-ink/70">{importFile.name}</p> : null}
             </div>
             <div className="rounded-lg border border-line bg-paper/70 p-3 text-sm leading-6 text-ink/65">
-              Colunas aceitas: nome, telefone, endereco, email, cpf, data_nascimento, plano, mensalidade, vencimento, status e observacoes.
+              Colunas aceitas: nome, telefone, endereco, email, cpf, data_nascimento, plano, data_inicio, mensalidade, vencimento, status e observacoes.
             </div>
             {importResult ? (
               <div className="rounded-lg border border-success/20 bg-success-soft p-3 text-sm text-success-dark">
