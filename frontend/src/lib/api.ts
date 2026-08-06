@@ -2,6 +2,7 @@ import type { User } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const PROFILE_KEY = "ac_academia_profile";
+const REQUEST_TIMEOUT_MS = 90000;
 
 // Em deploys com frontend e backend em domínios diferentes, o cookie pode falhar por
 // políticas de third-party cookies do navegador. Para o MVP, persistimos o bearer token
@@ -84,12 +85,26 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     headers.set("Authorization", `Bearer ${session.accessToken}`);
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers,
-    credentials: "include", // envia o cookie httpOnly de autenticação
-    cache: "no-store"
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers,
+      credentials: "include", // envia o cookie httpOnly de autenticação
+      cache: "no-store",
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError("A operacao demorou demais. Verifique sua conexao e tente novamente.", 408);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     // 401 quando havia sessão = cookie expirado/revogado -> desloga. No login em si

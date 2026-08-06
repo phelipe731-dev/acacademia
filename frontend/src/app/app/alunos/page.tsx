@@ -181,6 +181,7 @@ export default function StudentsPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importResult, setImportResult] = useState<StudentImportResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [saveSlow, setSaveSlow] = useState(false);
   const [importing, setImporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [studentModalOpen, setStudentModalOpen] = useState(false);
@@ -319,9 +320,11 @@ export default function StudentsPage() {
     event.preventDefault();
     if (submitting) return;
     setSubmitting(true);
+    setSaveSlow(false);
     setMessage(null);
+    const slowTimer = window.setTimeout(() => setSaveSlow(true), 8000);
     try {
-      await apiFetch<Student>("/students", {
+      const created = await apiFetch<Student>("/students", {
         method: "POST",
         body: JSON.stringify({
           name: form.name.trim(),
@@ -338,14 +341,18 @@ export default function StudentsPage() {
           notes: form.notes.trim() || null
         })
       });
+      setStudents((current) =>
+        [created, ...current.filter((student) => student.id !== created.id)].sort((first, second) =>
+          first.name.localeCompare(second.name, "pt-BR")
+        )
+      );
       setMessage({ text: "Aluno cadastrado.", type: "success" });
       closeStudentModal(true);
-      void loadStudents().catch((error) => {
-        setMessage({ text: getErrorMessage(error, "Aluno cadastrado, mas houve erro ao atualizar a lista."), type: "error" });
-      });
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao cadastrar aluno."), type: "error" });
     } finally {
+      window.clearTimeout(slowTimer);
+      setSaveSlow(false);
       setSubmitting(false);
     }
   }
@@ -778,6 +785,11 @@ export default function StudentsPage() {
                 </div>
               </div>
             </section>
+            {saveSlow ? (
+              <div className="rounded-lg border border-warning/25 bg-warning-soft px-3 py-2 text-sm font-semibold text-warning">
+                Ainda salvando. Se o servidor estava em repouso, isso pode levar alguns segundos.
+              </div>
+            ) : null}
           </form>
         </ModalShell>
       ) : null}
