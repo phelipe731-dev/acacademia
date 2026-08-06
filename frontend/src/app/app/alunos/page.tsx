@@ -18,6 +18,7 @@ import {
   X
 } from "lucide-react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Message } from "@/components/Message";
@@ -959,16 +960,16 @@ function ModalShell({
   footer: ReactNode;
   children: ReactNode;
 }) {
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 px-3 py-3 sm:px-5 sm:py-6"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-3 py-4 sm:px-5 sm:py-6"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <section
-        className={`my-auto flex max-h-[calc(100dvh-1.5rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:max-h-[calc(100dvh-3rem)]`}
+        className={`flex max-h-[calc(100dvh-2rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:max-h-[calc(100dvh-3rem)]`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="student-modal-title"
@@ -986,4 +987,7 @@ function ModalShell({
       </section>
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(modal, document.body);
 }
