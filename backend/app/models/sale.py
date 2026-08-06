@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.enums import PaymentMethod, SalePaymentMethod
+from app.models.enums import PaymentMethod, SaleInstallmentStatus, SalePaymentMethod
 
 
 def utcnow() -> datetime:
@@ -34,6 +34,7 @@ class Sale(Base):
     student = relationship("Student", back_populates="sales")
     created_by = relationship("User", back_populates="sales")
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
+    installments = relationship("SaleInstallment", back_populates="sale", cascade="all, delete-orphan")
 
 
 class SaleItem(Base):
@@ -48,3 +49,34 @@ class SaleItem(Base):
 
     sale = relationship("Sale", back_populates="items")
     product = relationship("Product", back_populates="sale_items")
+
+
+class SaleInstallment(Base):
+    __tablename__ = "sale_installments"
+    __table_args__ = (UniqueConstraint("sale_id", "installment_number", name="uq_sale_installments_sale_number"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    sale_id: Mapped[int] = mapped_column(ForeignKey("sales.id", ondelete="CASCADE"), index=True, nullable=False)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True, nullable=False)
+    installment_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    due_date: Mapped[date] = mapped_column(Date, index=True, nullable=False)
+    paid_at: Mapped[date | None] = mapped_column(Date, index=True, nullable=True)
+    status: Mapped[SaleInstallmentStatus] = mapped_column(
+        Enum(SaleInstallmentStatus, name="sale_installment_status", native_enum=False),
+        default=SaleInstallmentStatus.ABERTA,
+        index=True,
+        nullable=False,
+    )
+    payment_method: Mapped[PaymentMethod | None] = mapped_column(
+        Enum(PaymentMethod, name="sale_installment_actual_payment_method", native_enum=False),
+        nullable=True,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    sale = relationship("Sale", back_populates="installments")
+    student = relationship("Student", back_populates="sale_installments")

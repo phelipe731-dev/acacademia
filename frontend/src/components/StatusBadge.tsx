@@ -12,8 +12,11 @@ const labels: Record<string, string> = {
   INATIVO: "Inativo",
   INADIMPLENTE: "Inadimplente",
   PAGO: "Pago",
+  PAGA: "Paga",
   PENDENTE: "Pendente",
+  ABERTA: "Aberta",
   ATRASADO: "Atrasado",
+  ATRASADA: "Atrasada",
   CANCELADO: "Cancelado",
   DINHEIRO: "Dinheiro",
   PIX: "Pix",
@@ -25,10 +28,11 @@ const labels: Record<string, string> = {
 export function StatusBadge({ value }: { value: string }) {
   const tone: Tone =
     value === "ATIVO" || value === "PAGO"
+      || value === "PAGA"
       ? "green"
-      : value === "INADIMPLENTE" || value === "ATRASADO"
+      : value === "INADIMPLENTE" || value === "ATRASADO" || value === "ATRASADA"
         ? "red"
-        : value === "PENDENTE"
+        : value === "PENDENTE" || value === "ABERTA"
           ? "yellow"
           : "gray";
   const { badge, dot } = toneClass[tone];

@@ -3,6 +3,7 @@ export type StudentStatus = "ATIVO" | "INATIVO" | "INADIMPLENTE";
 export type PaymentStatus = "PENDENTE" | "PAGO" | "ATRASADO" | "CANCELADO";
 export type PaymentMethod = "DINHEIRO" | "PIX" | "CARTAO" | "OUTRO";
 export type SalePaymentMethod = PaymentMethod | "PRAZO";
+export type SaleInstallmentStatus = "ABERTA" | "PAGA" | "ATRASADA" | "CANCELADA";
 export type ProductStatus = "ATIVO" | "INATIVO";
 export type StockMovementType = "ENTRADA" | "SAIDA" | "SAIDA_VENDA" | "AJUSTE";
 export type TrainingMediaType = "IMAGE" | "VIDEO" | "EXTERNAL_IMAGE" | "EXTERNAL_VIDEO";
@@ -125,6 +126,21 @@ export interface SaleItem {
   product?: Product | null;
 }
 
+export interface SaleInstallment {
+  id: number;
+  sale_id: number;
+  student_id: number;
+  installment_number: number;
+  amount: string;
+  due_date: string;
+  paid_at?: string | null;
+  status: SaleInstallmentStatus;
+  payment_method?: PaymentMethod | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Sale {
   id: number;
   student_id?: number | null;
@@ -136,6 +152,7 @@ export interface Sale {
   created_by_id?: number | null;
   created_at: string;
   items: SaleItem[];
+  installments?: SaleInstallment[];
   student?: Student | null;
   created_by?: User | null;
 }

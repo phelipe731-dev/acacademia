@@ -285,6 +285,7 @@ def list_student_sales(
             .where(Sale.student_id == student_id)
             .options(
                 selectinload(Sale.items).selectinload(SaleItem.product),
+                selectinload(Sale.installments),
                 selectinload(Sale.created_by),
                 selectinload(Sale.student),
             )

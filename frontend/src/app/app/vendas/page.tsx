@@ -20,13 +20,21 @@ function makeItem(key?: string): DraftItem {
   return { key: key ?? crypto.randomUUID(), product_id: "", quantity: "1" };
 }
 
+function todayDateInput(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
 const paymentMethods: SalePaymentMethod[] = ["DINHEIRO", "PIX", "CARTAO", "PRAZO", "OUTRO"];
 const installmentMethods: PaymentMethod[] = ["PIX", "DINHEIRO", "CARTAO", "OUTRO"];
 
 function salePaymentLabel(sale: Sale) {
   if (sale.payment_method !== "PRAZO") return sale.payment_method;
   const method = sale.installment_payment_method ? ` via ${sale.installment_payment_method}` : "";
-  return `PRAZO · ${sale.installments_count}x${method}`;
+  const firstInstallment = sale.installments?.[0];
+  const due = firstInstallment ? ` · 1a vence ${formatDate(firstInstallment.due_date)}` : "";
+  return `PRAZO · ${sale.installments_count}x${method}${due}`;
 }
 
 export default function SalesPage() {
@@ -36,8 +44,9 @@ export default function SalesPage() {
   const [items, setItems] = useState<DraftItem[]>(() => [makeItem("initial")]);
   const [studentId, setStudentId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>("PIX");
-  const [installmentsCount, setInstallmentsCount] = useState("2");
+  const [installmentsCount, setInstallmentsCount] = useState("1");
   const [installmentPaymentMethod, setInstallmentPaymentMethod] = useState<PaymentMethod>("PIX");
+  const [firstDueDate, setFirstDueDate] = useState(todayDateInput);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -98,6 +107,7 @@ export default function SalesPage() {
           payment_method: paymentMethod,
           installments_count: paymentMethod === "PRAZO" ? Number(installmentsCount) : 1,
           installment_payment_method: paymentMethod === "PRAZO" ? installmentPaymentMethod : null,
+          first_due_date: paymentMethod === "PRAZO" ? firstDueDate : null,
           notes: notes || null,
           items: items.map((item) => ({ product_id: Number(item.product_id), quantity: Number(item.quantity) }))
         })
@@ -105,8 +115,9 @@ export default function SalesPage() {
       setItems([makeItem()]);
       setStudentId("");
       setPaymentMethod("PIX");
-      setInstallmentsCount("2");
+      setInstallmentsCount("1");
       setInstallmentPaymentMethod("PIX");
+      setFirstDueDate(todayDateInput());
       setNotes("");
       setMessage({ text: "Venda registrada e estoque atualizado.", type: "success" });
       await load();
@@ -243,7 +254,7 @@ export default function SalesPage() {
           </div>
 
           {paymentMethod === "PRAZO" ? (
-            <div className="grid gap-3 rounded-lg border border-line bg-paper/70 p-3.5 md:grid-cols-[160px_220px_1fr] md:items-end">
+            <div className="grid gap-3 rounded-lg border border-line bg-paper/70 p-3.5 md:grid-cols-[140px_190px_220px_1fr] md:items-end">
               <div>
                 <label className="label" htmlFor="sale-installments">Parcelas</label>
                 <input
@@ -251,10 +262,21 @@ export default function SalesPage() {
                   className="field"
                   required
                   type="number"
-                  min="2"
+                  min="1"
                   max="24"
                   value={installmentsCount}
                   onChange={(event) => setInstallmentsCount(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="sale-first-due-date">1o vencimento</label>
+                <input
+                  id="sale-first-due-date"
+                  className="field"
+                  required
+                  type="date"
+                  value={firstDueDate}
+                  onChange={(event) => setFirstDueDate(event.target.value)}
                 />
               </div>
               <div>
@@ -271,7 +293,7 @@ export default function SalesPage() {
                 </select>
               </div>
               <p className="text-sm leading-6 text-ink/60">
-                O valor fica registrado no historico do aluno como venda a prazo informal.
+                O sistema cria faturas em aberto no historico do aluno, inclusive em 1x com vencimento futuro.
               </p>
             </div>
           ) : null}

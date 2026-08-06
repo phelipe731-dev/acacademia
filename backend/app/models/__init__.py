@@ -2,6 +2,7 @@ from app.models.enums import (
     PaymentMethod,
     PaymentStatus,
     ProductStatus,
+    SaleInstallmentStatus,
     SalePaymentMethod,
     StockMovementType,
     StudentStatus,
@@ -12,7 +13,7 @@ from app.models.audit import AuditLog
 from app.models.checkin import CheckIn
 from app.models.payment import Payment
 from app.models.product import Product
-from app.models.sale import Sale, SaleItem
+from app.models.sale import Sale, SaleInstallment, SaleItem
 from app.models.stock import StockMovement
 from app.models.student import Student
 from app.models.training import (
@@ -32,6 +33,8 @@ __all__ = [
     "Product",
     "ProductStatus",
     "Sale",
+    "SaleInstallment",
+    "SaleInstallmentStatus",
     "SaleItem",
     "SalePaymentMethod",
     "StockMovement",

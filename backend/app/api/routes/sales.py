@@ -1,16 +1,19 @@
 from datetime import date, datetime, time
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_roles
+from app.core.tz import business_today
 from app.db.session import get_db
-from app.models.enums import UserRole
-from app.models.sale import Sale, SaleItem
+from app.models.enums import PaymentMethod, SaleInstallmentStatus, UserRole
+from app.models.sale import Sale, SaleInstallment, SaleItem
 from app.models.user import User
-from app.schemas.sale import SaleCreate, SaleRead
-from app.services.sales import create_sale_with_stock
+from app.schemas.sale import SaleCreate, SaleInstallmentPay, SaleInstallmentRead, SaleRead
+from app.services.audit import model_snapshot, record_audit
+from app.services.payments import update_student_status_from_payments
+from app.services.sales import create_sale_with_stock, normalize_sale_installment_status, refresh_overdue_sale_installments
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
@@ -27,6 +30,7 @@ def list_sales(
         select(Sale)
         .options(
             selectinload(Sale.items).selectinload(SaleItem.product),
+            selectinload(Sale.installments),
             selectinload(Sale.created_by),
             selectinload(Sale.student),
         )
@@ -41,6 +45,30 @@ def list_sales(
     return list(db.scalars(stmt).all())
 
 
+@router.get("/installments", response_model=list[SaleInstallmentRead])
+def list_sale_installments(
+    student_id: int | None = Query(default=None),
+    status_filter: SaleInstallmentStatus | None = Query(default=None, alias="status"),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
+    db: Session = Depends(get_db),
+) -> list[SaleInstallment]:
+    refresh_overdue_sale_installments(db)
+    stmt = select(SaleInstallment).order_by(SaleInstallment.due_date.desc(), SaleInstallment.id.desc())
+    if student_id:
+        stmt = stmt.where(SaleInstallment.student_id == student_id)
+    if status_filter:
+        stmt = stmt.where(SaleInstallment.status == status_filter)
+    if start_date:
+        stmt = stmt.where(SaleInstallment.due_date >= start_date)
+    if end_date:
+        stmt = stmt.where(SaleInstallment.due_date <= end_date)
+    installments = list(db.scalars(stmt).all())
+    db.commit()
+    return installments
+
+
 @router.post("", response_model=SaleRead, status_code=status.HTTP_201_CREATED)
 def create_sale(
     payload: SaleCreate,
@@ -48,3 +76,46 @@ def create_sale(
     db: Session = Depends(get_db),
 ) -> Sale:
     return create_sale_with_stock(db, payload, current_user)
+
+
+@router.patch("/installments/{installment_id}/pay", response_model=SaleInstallmentRead)
+def pay_sale_installment(
+    installment_id: int,
+    payload: SaleInstallmentPay,
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
+    db: Session = Depends(get_db),
+) -> SaleInstallment:
+    installment = db.get(SaleInstallment, installment_id)
+    if installment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fatura da venda nao encontrada.")
+    if installment.status == SaleInstallmentStatus.CANCELADA:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Fatura cancelada nao pode ser paga.")
+
+    before = model_snapshot(installment)
+    installment.status = SaleInstallmentStatus.PAGA
+    installment.paid_at = payload.paid_at or business_today()
+    installment.payment_method = (
+        payload.payment_method
+        or installment.payment_method
+        or installment.sale.installment_payment_method
+        or PaymentMethod.PIX
+    )
+    if payload.notes is not None:
+        installment.notes = payload.notes
+    normalize_sale_installment_status(installment)
+    db.flush()
+    update_student_status_from_payments(db, installment.student_id)
+    db.flush()
+    record_audit(
+        db,
+        current_user,
+        entity_type="SALE_INSTALLMENT",
+        entity_id=installment.id,
+        action="PAY",
+        summary=f"Fatura de venda paga #{installment.id}.",
+        before=before,
+        after=model_snapshot(installment),
+    )
+    db.commit()
+    db.refresh(installment)
+    return installment

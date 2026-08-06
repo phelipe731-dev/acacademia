@@ -4,11 +4,13 @@ from datetime import date
 from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 
-from app.models.enums import PaymentMethod, PaymentStatus, StudentStatus
+from app.models.enums import PaymentMethod, PaymentStatus, SaleInstallmentStatus, StudentStatus
 from app.models.payment import Payment
+from app.models.sale import SaleInstallment
 from app.models.student import Student
 from app.models.user import User
 from app.services.audit import record_audit
+from app.services.sales import refresh_overdue_sale_installments
 
 
 def normalize_payment_status(payment: Payment, today: date | None = None) -> None:
@@ -42,11 +44,18 @@ def update_student_status_from_payments(db: Session, student_id: int) -> None:
             Payment.status == PaymentStatus.ATRASADO,
         )
     )
-    student.status = StudentStatus.INADIMPLENTE if overdue_count else StudentStatus.ATIVO
+    overdue_sale_installments_count = db.scalar(
+        select(func.count(SaleInstallment.id)).where(
+            SaleInstallment.student_id == student_id,
+            SaleInstallment.status == SaleInstallmentStatus.ATRASADA,
+        )
+    )
+    student.status = StudentStatus.INADIMPLENTE if overdue_count or overdue_sale_installments_count else StudentStatus.ATIVO
 
 
 def refresh_all_student_statuses(db: Session) -> None:
     refresh_overdue_payments(db)
+    refresh_overdue_sale_installments(db)
     overdue_exists = (
         select(Payment.id)
         .where(
@@ -55,12 +64,20 @@ def refresh_all_student_statuses(db: Session) -> None:
         )
         .exists()
     )
+    overdue_sale_installment_exists = (
+        select(SaleInstallment.id)
+        .where(
+            SaleInstallment.student_id == Student.id,
+            SaleInstallment.status == SaleInstallmentStatus.ATRASADA,
+        )
+        .exists()
+    )
     db.execute(
         update(Student)
         .where(Student.status != StudentStatus.INATIVO)
         .values(
             status=case(
-                (overdue_exists, StudentStatus.INADIMPLENTE),
+                (overdue_exists | overdue_sale_installment_exists, StudentStatus.INADIMPLENTE),
                 else_=StudentStatus.ATIVO,
             )
         )

@@ -309,6 +309,7 @@ def seed_sales(db: Session, products: list[Product], students: list[Student], ad
                 payment_method=method,
                 installments_count=installments,
                 installment_payment_method=installment_method,
+                first_due_date=business_today() + timedelta(days=15) if method == SalePaymentMethod.PRAZO else None,
                 notes=sale_notes,
                 items=[
                     SaleItemCreate(product_id=by_name[product_name].id, quantity=quantity)

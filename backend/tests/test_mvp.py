@@ -172,6 +172,7 @@ def test_sale_requires_student_and_supports_informal_installments(client: TestCl
             "payment_method": "PRAZO",
             "installments_count": 3,
             "installment_payment_method": "PIX",
+            "first_due_date": str(date.today() + timedelta(days=10)),
             "notes": "3x informal",
             "items": [{"product_id": product["id"], "quantity": 1}],
         },
@@ -180,6 +181,52 @@ def test_sale_requires_student_and_supports_informal_installments(client: TestCl
     assert response.json()["payment_method"] == "PRAZO"
     assert response.json()["installments_count"] == 3
     assert response.json()["installment_payment_method"] == "PIX"
+    assert len(response.json()["installments"]) == 3
+    assert response.json()["installments"][0]["status"] == "ABERTA"
+
+
+def test_sale_on_credit_creates_future_invoice_and_allows_specific_payment(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+    product = create_product(client, headers, stock=5)
+    due_date = date.today() + timedelta(days=14)
+
+    response = client.post(
+        "/sales",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "payment_method": "PRAZO",
+            "installments_count": 1,
+            "installment_payment_method": "PIX",
+            "first_due_date": str(due_date),
+            "notes": "Pagar no dia combinado",
+            "items": [{"product_id": product["id"], "quantity": 1}],
+        },
+    )
+    assert response.status_code == 201, response.text
+    installment = response.json()["installments"][0]
+    assert installment["amount"] == "120.00"
+    assert installment["due_date"] == str(due_date)
+    assert installment["status"] == "ABERTA"
+
+    invoices = client.get(f"/sales/installments?student_id={student['id']}&status=ABERTA", headers=headers)
+    assert invoices.status_code == 200, invoices.text
+    assert invoices.json()[0]["id"] == installment["id"]
+
+    paid = client.patch(
+        f"/sales/installments/{installment['id']}/pay",
+        headers=headers,
+        json={"paid_at": str(due_date), "payment_method": "PIX", "notes": "Quitado no PIX"},
+    )
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["status"] == "PAGA"
+    assert paid.json()["paid_at"] == str(due_date)
+    assert paid.json()["payment_method"] == "PIX"
+
+    history = client.get(f"/students/{student['id']}/sales", headers=headers)
+    assert history.status_code == 200
+    assert history.json()[0]["installments"][0]["status"] == "PAGA"
 
 
 def test_sale_blocks_when_stock_is_insufficient(client: TestClient) -> None:
