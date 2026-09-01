@@ -44,6 +44,22 @@ interface StudentFormState {
   notes: string;
 }
 
+interface StudentCreatePayload {
+  name: string;
+  phone: string;
+  email: string | null;
+  cpf: string | null;
+  address: string;
+  birth_date: string | null;
+  plan: string;
+  plan_start_date: string | null;
+  plan_end_date: string | null;
+  monthly_fee: number;
+  due_day: number;
+  status: StudentStatus;
+  notes: string | null;
+}
+
 const pageSize = 10;
 
 const statusFilterOptions: Array<{ value: StudentFilterStatus; label: string }> = [
@@ -170,6 +186,36 @@ function isFormDirty(form: StudentFormState): boolean {
   return JSON.stringify(form) !== JSON.stringify(createEmptyStudentForm());
 }
 
+function buildStudentPayload(form: StudentFormState): StudentCreatePayload {
+  return {
+    name: form.name.trim(),
+    phone: onlyDigits(form.phone) || form.phone.trim(),
+    email: form.email.trim() || null,
+    cpf: onlyDigits(form.cpf) || null,
+    address: form.address.trim(),
+    birth_date: form.birth_date || null,
+    plan: form.plan.trim(),
+    plan_start_date: form.plan_start_date || null,
+    plan_end_date: form.plan_end_date || null,
+    monthly_fee: Number(String(form.monthly_fee).replace(",", ".")),
+    due_day: Number(form.due_day),
+    status: form.status,
+    notes: form.notes.trim() || null
+  };
+}
+
+function validateStudentPayload(payload: StudentCreatePayload): string | null {
+  if (payload.name.length < 2) return "Informe o nome completo do aluno.";
+  if (payload.phone.length < 3) return "Informe o telefone do aluno.";
+  if (payload.address.length < 2) return "Informe o endereco do aluno.";
+  if (payload.plan.length < 2) return "Informe o plano do aluno.";
+  if (!Number.isFinite(payload.monthly_fee) || payload.monthly_fee < 0) return "Informe uma mensalidade valida.";
+  if (!Number.isInteger(payload.due_day) || payload.due_day < 1 || payload.due_day > 31) {
+    return "Informe um dia de vencimento entre 1 e 31.";
+  }
+  return null;
+}
+
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
@@ -179,6 +225,7 @@ export default function StudentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [form, setForm] = useState<StudentFormState>(createEmptyStudentForm);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
+  const [studentFormError, setStudentFormError] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole>("RECEPCAO");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importResult, setImportResult] = useState<StudentImportResult | null>(null);
@@ -288,11 +335,13 @@ export default function StudentsPage() {
   function closeStudentModal(force = false) {
     if (!force && isFormDirty(form) && !window.confirm("Descartar os dados do novo aluno?")) return;
     setStudentModalOpen(false);
+    setStudentFormError(null);
     setForm(createEmptyStudentForm());
   }
 
   function openStudentModal() {
     setMessage(null);
+    setStudentFormError(null);
     setForm(createEmptyStudentForm());
     setStudentModalOpen(true);
   }
@@ -321,28 +370,21 @@ export default function StudentsPage() {
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting) return;
+    const payload = buildStudentPayload(form);
+    const validationMessage = validateStudentPayload(payload);
+    if (validationMessage) {
+      setStudentFormError(validationMessage);
+      return;
+    }
     setSubmitting(true);
     setSaveSlow(false);
     setMessage(null);
+    setStudentFormError(null);
     const slowTimer = window.setTimeout(() => setSaveSlow(true), 8000);
     try {
       const created = await apiFetch<Student>("/students", {
         method: "POST",
-        body: JSON.stringify({
-          name: form.name.trim(),
-          phone: onlyDigits(form.phone) || form.phone.trim(),
-          email: form.email.trim() || null,
-          cpf: onlyDigits(form.cpf) || null,
-          address: form.address.trim(),
-          birth_date: form.birth_date || null,
-          plan: form.plan.trim(),
-          plan_start_date: form.plan_start_date || null,
-          plan_end_date: form.plan_end_date || null,
-          monthly_fee: Number(String(form.monthly_fee).replace(",", ".")),
-          due_day: Number(form.due_day),
-          status: form.status,
-          notes: form.notes.trim() || null
-        })
+        body: JSON.stringify(payload)
       });
       setStudents((current) =>
         [created, ...current.filter((student) => student.id !== created.id)].sort((first, second) =>
@@ -352,7 +394,7 @@ export default function StudentsPage() {
       setMessage({ text: "Aluno cadastrado.", type: "success" });
       closeStudentModal(true);
     } catch (error) {
-      setMessage({ text: getErrorMessage(error, "Erro ao cadastrar aluno."), type: "error" });
+      setStudentFormError(getErrorMessage(error, "Erro ao cadastrar aluno."));
     } finally {
       window.clearTimeout(slowTimer);
       setSaveSlow(false);
@@ -631,6 +673,7 @@ export default function StudentsPage() {
           </>
         }>
           <form id="student-create-form" onSubmit={handleCreate} className="space-y-5">
+            {studentFormError ? <Message message={studentFormError} type="error" /> : null}
             <section>
               <h2 className="text-sm font-bold text-ink">Dados pessoais</h2>
               <div className="mt-3 grid gap-4 md:grid-cols-3">
