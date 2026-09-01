@@ -407,7 +407,8 @@ def test_generate_monthly_payments_is_idempotent(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     create_student(client, headers)
 
-    payload = {"year": 2026, "month": 8}
+    next_month = (date.today().replace(day=1) + timedelta(days=32)).replace(day=1)
+    payload = {"year": next_month.year, "month": next_month.month}
     first = client.post("/payments/generate-monthly", headers=headers, json=payload)
     assert first.status_code == 200, first.text
     assert first.json()["generated"] == 1
