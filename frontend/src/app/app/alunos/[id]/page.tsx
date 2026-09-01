@@ -72,7 +72,9 @@ interface FinancialRow {
   description: string;
   notes?: string | null;
   saleInstallmentId?: number;
+  paymentId?: number;
   canPay?: boolean;
+  canCancel?: boolean;
 }
 
 type SaleInstallmentEntry = {
@@ -249,6 +251,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
   const [role, setRole] = useState<UserRole>("RECEPCAO");
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [cancelingPaymentId, setCancelingPaymentId] = useState<number | null>(null);
   const [savingSaleInstallmentPayment, setSavingSaleInstallmentPayment] = useState(false);
   const [saleInstallmentPaymentForm, setSaleInstallmentPaymentForm] = useState<{
     id: number;
@@ -449,6 +452,26 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  async function handleCancelPayment(paymentId: number, label: string) {
+    if (cancelingPaymentId !== null) return;
+    const reason = window.prompt(`Motivo para cancelar ${label}?`, "Lancamento duplicado");
+    if (reason === null) return;
+    setCancelingPaymentId(paymentId);
+    setMessage(null);
+    try {
+      await apiFetch<Payment>(`/payments/${paymentId}/cancel`, {
+        method: "PATCH",
+        body: JSON.stringify({ reason: reason.trim() || "Cancelamento operacional" })
+      });
+      setMessage({ text: "Mensalidade cancelada. O historico e os totais foram atualizados.", type: "success" });
+      await load(role);
+    } catch (error) {
+      setMessage({ text: getErrorMessage(error, "Erro ao cancelar mensalidade."), type: "error" });
+    } finally {
+      setCancelingPaymentId(null);
+    }
+  }
+
   const paidPayments = useMemo(() => payments.filter((payment) => payment.status === "PAGO"), [payments]);
   const openPayments = useMemo(
     () => payments.filter((payment) => payment.status === "PENDENTE" || payment.status === "ATRASADO"),
@@ -558,13 +581,14 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     if (!student) return [];
     const items: ActivityItem[] = [];
     payments.forEach((payment) => {
+      const canceled = payment.status === "CANCELADO";
       items.push({
         key: `payment-${payment.id}-${payment.updated_at}`,
-        icon: payment.status === "PAGO" ? CheckCircle2 : Receipt,
-        title: payment.status === "PAGO" ? "Mensalidade paga" : payment.status === "ATRASADO" ? "Mensalidade vencida" : "Mensalidade registrada",
+        icon: canceled ? XCircle : payment.status === "PAGO" ? CheckCircle2 : Receipt,
+        title: canceled ? "Mensalidade cancelada" : payment.status === "PAGO" ? "Mensalidade paga" : payment.status === "ATRASADO" ? "Mensalidade vencida" : "Mensalidade registrada",
         description: `${formatMoney(payment.amount)}${payment.payment_method ? ` via ${paymentMethodLabels[payment.payment_method] ?? payment.payment_method}` : ""}`,
         at: payment.paid_at || payment.updated_at || payment.created_at || payment.due_date,
-        tone: payment.status === "PAGO" ? "green" : payment.status === "ATRASADO" ? "red" : "orange"
+        tone: canceled ? "red" : payment.status === "PAGO" ? "green" : payment.status === "ATRASADO" ? "red" : "orange"
       });
     });
     checkins.forEach((checkin) => {
@@ -621,7 +645,9 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       status: payment.status,
       type: "MENSALIDADE",
       description: "Mensalidade",
-      notes: payment.notes
+      notes: payment.notes,
+      paymentId: payment.id,
+      canCancel: payment.status !== "CANCELADO"
     }));
     sales.forEach((sale) => {
       const saleStatus = sale.status ?? "CONCLUIDA";
@@ -751,6 +777,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
           activeWorkout={activeWorkout}
           activities={activities}
           averagePerWeek={averagePerWeek}
+          cancelingPaymentId={cancelingPaymentId}
           canEditTraining={canEditTraining}
           canSeeFinancial={canSeeFinancial}
           checkins={checkins}
@@ -760,6 +787,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
           lastPresenceDays={lastPresenceDays}
           monthCheckins={monthCheckins}
           nextDueInfo={nextDueInfo}
+          onCancelPayment={handleCancelPayment}
           openPaymentsTotal={openFinancialTotal}
           payments={payments}
           previewFilter={previewFilter}
@@ -782,6 +810,8 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
           financialStatus={financialStatusFilter}
           financialType={financialType}
           installmentSales={installmentSales}
+          cancelingPaymentId={cancelingPaymentId}
+          onCancelPayment={handleCancelPayment}
           onPaySaleInstallment={openSaleInstallmentPayment}
           openSaleInstallments={openSaleInstallments}
           openSaleInstallmentsTotal={openSaleInstallmentsTotal}
@@ -856,6 +886,7 @@ function OverviewTab({
   activeWorkout,
   activities,
   averagePerWeek,
+  cancelingPaymentId,
   canEditTraining,
   canSeeFinancial,
   checkins,
@@ -865,6 +896,7 @@ function OverviewTab({
   lastPresenceDays,
   monthCheckins,
   nextDueInfo,
+  onCancelPayment,
   openPaymentsTotal,
   payments,
   previewFilter,
@@ -878,6 +910,7 @@ function OverviewTab({
   activeWorkout?: TrainingPlan;
   activities: ActivityItem[];
   averagePerWeek: number;
+  cancelingPaymentId: number | null;
   canEditTraining: boolean;
   canSeeFinancial: boolean;
   checkins: CheckIn[];
@@ -887,6 +920,7 @@ function OverviewTab({
   lastPresenceDays: number | null;
   monthCheckins: CheckIn[];
   nextDueInfo: { date: Date | null; label: string; helper: string };
+  onCancelPayment: (paymentId: number, label: string) => void;
   openPaymentsTotal: number;
   payments: Payment[];
   previewFilter: PaymentPreviewFilter;
@@ -963,6 +997,8 @@ function OverviewTab({
 
         {canSeeFinancial ? (
           <FinancialPreview
+            cancelingPaymentId={cancelingPaymentId}
+            onCancelPayment={onCancelPayment}
             payments={previewPayments}
             previewFilter={previewFilter}
             setActiveTab={setActiveTab}
@@ -1206,11 +1242,15 @@ function ActiveWorkoutCard({
 }
 
 function FinancialPreview({
+  cancelingPaymentId,
+  onCancelPayment,
   payments,
   previewFilter,
   setActiveTab,
   setPreviewFilter
 }: {
+  cancelingPaymentId: number | null;
+  onCancelPayment: (paymentId: number, label: string) => void;
   payments: Payment[];
   previewFilter: PaymentPreviewFilter;
   setActiveTab: (tab: DetailTab) => void;
@@ -1243,7 +1283,7 @@ function FinancialPreview({
         {payments.length === 0 ? (
           <EmptyState icon={Receipt} title="Nenhuma mensalidade encontrada" hint="Os registros financeiros do aluno aparecerao aqui." />
         ) : (
-          <PaymentsTable payments={payments} compact />
+          <PaymentsTable cancelingPaymentId={cancelingPaymentId} onCancelPayment={onCancelPayment} payments={payments} compact />
         )}
       </div>
     </section>
@@ -1251,6 +1291,7 @@ function FinancialPreview({
 }
 
 function FinancialTab({
+  cancelingPaymentId,
   canSeeFinancial,
   filteredRows,
   financialEndDate,
@@ -1259,6 +1300,7 @@ function FinancialTab({
   financialStatus,
   financialType,
   installmentSales,
+  onCancelPayment,
   onPaySaleInstallment,
   openPayments,
   openPaymentsTotal,
@@ -1273,6 +1315,7 @@ function FinancialTab({
   setFinancialStatus,
   setFinancialType
 }: {
+  cancelingPaymentId: number | null;
   canSeeFinancial: boolean;
   filteredRows: FinancialRow[];
   financialEndDate: string;
@@ -1281,6 +1324,7 @@ function FinancialTab({
   financialStatus: FinancialStatusFilter;
   financialType: FinancialTypeFilter;
   installmentSales: Sale[];
+  onCancelPayment: (paymentId: number, label: string) => void;
   onPaySaleInstallment: (row: FinancialRow) => void;
   openPayments: Payment[];
   openPaymentsTotal: number;
@@ -1360,7 +1404,12 @@ function FinancialTab({
           {filteredRows.length === 0 ? (
             <EmptyState icon={Receipt} title="Nenhuma movimentacao encontrada" hint="Ajuste os filtros para ver outros registros." />
           ) : (
-            <FinancialRowsTable rows={filteredRows} onPaySaleInstallment={onPaySaleInstallment} />
+            <FinancialRowsTable
+              cancelingPaymentId={cancelingPaymentId}
+              onCancelPayment={onCancelPayment}
+              onPaySaleInstallment={onPaySaleInstallment}
+              rows={filteredRows}
+            />
           )}
         </div>
       </section>
@@ -1801,22 +1850,45 @@ function Field({ id, label, children, className = "" }: { id: string; label: str
   );
 }
 
-function PaymentsTable({ payments, compact = false }: { payments: Payment[]; compact?: boolean }) {
+function PaymentsTable({
+  cancelingPaymentId,
+  compact = false,
+  onCancelPayment,
+  payments
+}: {
+  cancelingPaymentId?: number | null;
+  compact?: boolean;
+  onCancelPayment?: (paymentId: number, label: string) => void;
+  payments: Payment[];
+}) {
   return (
     <>
       <div className="mobile-card-list">
-        {payments.map((payment) => (
-          <MobileRecord
-            key={payment.id}
-            title={formatMoney(payment.amount)}
-            subtitle={`Vencimento ${formatDate(payment.due_date)}`}
-            badge={<StatusBadge value={payment.status} />}
-          >
-            <MobileRecordRow label="Pagamento" value={formatDate(payment.paid_at)} />
-            <MobileRecordRow label="Forma" value={paymentMethodLabels[payment.payment_method] ?? payment.payment_method} />
-            {!compact ? <MobileRecordRow label="Obs." value={payment.notes || "-"} /> : null}
-          </MobileRecord>
-        ))}
+        {payments.map((payment) => {
+          const canCancel = payment.status !== "CANCELADO" && Boolean(onCancelPayment);
+          const canceling = cancelingPaymentId === payment.id;
+          const label = `mensalidade de ${formatMoney(payment.amount)} com vencimento em ${formatDate(payment.due_date)}`;
+          return (
+            <MobileRecord
+              key={payment.id}
+              title={formatMoney(payment.amount)}
+              subtitle={`Vencimento ${formatDate(payment.due_date)}`}
+              badge={<StatusBadge value={payment.status} />}
+              actions={
+                canCancel ? (
+                  <button className="btn-secondary w-full text-danger" type="button" disabled={canceling} onClick={() => onCancelPayment?.(payment.id, label)}>
+                    <XCircle className="h-4 w-4" aria-hidden />
+                    {canceling ? "Cancelando..." : "Excluir lancamento"}
+                  </button>
+                ) : undefined
+              }
+            >
+              <MobileRecordRow label="Pagamento" value={formatDate(payment.paid_at)} />
+              <MobileRecordRow label="Forma" value={paymentMethodLabels[payment.payment_method] ?? payment.payment_method} />
+              {!compact ? <MobileRecordRow label="Obs." value={payment.notes || "-"} /> : null}
+            </MobileRecord>
+          );
+        })}
       </div>
 
       <div className="desktop-table-wrap">
@@ -1833,17 +1905,36 @@ function PaymentsTable({ payments, compact = false }: { payments: Payment[]; com
             </tr>
           </thead>
           <tbody>
-            {payments.map((payment) => (
-              <tr key={payment.id}>
-                <td>{formatDate(payment.due_date)}</td>
-                <td>{formatDate(payment.paid_at)}</td>
-                <td>{formatMoney(payment.amount)}</td>
-                <td>{paymentMethodLabels[payment.payment_method] ?? payment.payment_method}</td>
-                <td><StatusBadge value={payment.status} /></td>
-                {!compact ? <td>{payment.notes || "-"}</td> : null}
-                <td className="text-ink/45">...</td>
-              </tr>
-            ))}
+            {payments.map((payment) => {
+              const canCancel = payment.status !== "CANCELADO" && Boolean(onCancelPayment);
+              const canceling = cancelingPaymentId === payment.id;
+              const label = `mensalidade de ${formatMoney(payment.amount)} com vencimento em ${formatDate(payment.due_date)}`;
+              return (
+                <tr key={payment.id}>
+                  <td>{formatDate(payment.due_date)}</td>
+                  <td>{formatDate(payment.paid_at)}</td>
+                  <td>{formatMoney(payment.amount)}</td>
+                  <td>{paymentMethodLabels[payment.payment_method] ?? payment.payment_method}</td>
+                  <td><StatusBadge value={payment.status} /></td>
+                  {!compact ? <td>{payment.notes || "-"}</td> : null}
+                  <td>
+                    {canCancel ? (
+                      <button
+                        className="btn-secondary px-3 py-2 text-xs text-danger"
+                        type="button"
+                        disabled={canceling}
+                        onClick={() => onCancelPayment?.(payment.id, label)}
+                      >
+                        <XCircle className="h-4 w-4" aria-hidden />
+                        {canceling ? "Cancelando..." : "Excluir"}
+                      </button>
+                    ) : (
+                      <span className="text-ink/45">-</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1851,29 +1942,49 @@ function PaymentsTable({ payments, compact = false }: { payments: Payment[]; com
   );
 }
 
-function FinancialRowsTable({ rows, onPaySaleInstallment }: { rows: FinancialRow[]; onPaySaleInstallment: (row: FinancialRow) => void }) {
+function FinancialRowsTable({
+  cancelingPaymentId,
+  onCancelPayment,
+  onPaySaleInstallment,
+  rows
+}: {
+  cancelingPaymentId: number | null;
+  onCancelPayment: (paymentId: number, label: string) => void;
+  onPaySaleInstallment: (row: FinancialRow) => void;
+  rows: FinancialRow[];
+}) {
   return (
     <>
       <div className="mobile-card-list">
-        {rows.map((row) => (
-          <MobileRecord
-            key={row.key}
-            title={row.description}
-            subtitle={formatDate(row.date)}
-            badge={<StatusBadge value={row.status} />}
-          >
-            <MobileRecordRow label="Valor" value={formatMoney(row.amount)} />
-            <MobileRecordRow label="Forma" value={paymentMethodLabels[row.method] ?? row.method} />
-            <MobileRecordRow label="Tipo" value={row.type === "MENSALIDADE" ? "Mensalidade" : row.type === "PRAZO" ? "Venda a prazo" : "Venda"} />
-            <MobileRecordRow label="Obs." value={row.notes || "-"} />
-            {row.canPay ? (
-              <button className="btn-primary mt-3 w-full" type="button" onClick={() => onPaySaleInstallment(row)}>
-                <CheckCircle2 className="h-4 w-4" aria-hidden />
-                Registrar pagamento
-              </button>
-            ) : null}
-          </MobileRecord>
-        ))}
+        {rows.map((row) => {
+          const canceling = row.paymentId !== undefined && cancelingPaymentId === row.paymentId;
+          const cancelLabel = `${row.description.toLocaleLowerCase("pt-BR")} de ${formatMoney(row.amount)} com vencimento em ${formatDate(row.dueDate)}`;
+          return (
+            <MobileRecord
+              key={row.key}
+              title={row.description}
+              subtitle={formatDate(row.date)}
+              badge={<StatusBadge value={row.status} />}
+            >
+              <MobileRecordRow label="Valor" value={formatMoney(row.amount)} />
+              <MobileRecordRow label="Forma" value={paymentMethodLabels[row.method] ?? row.method} />
+              <MobileRecordRow label="Tipo" value={row.type === "MENSALIDADE" ? "Mensalidade" : row.type === "PRAZO" ? "Venda a prazo" : "Venda"} />
+              <MobileRecordRow label="Obs." value={row.notes || "-"} />
+              {row.canPay ? (
+                <button className="btn-primary mt-3 w-full" type="button" onClick={() => onPaySaleInstallment(row)}>
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                  Registrar pagamento
+                </button>
+              ) : null}
+              {row.canCancel && row.paymentId !== undefined ? (
+                <button className="btn-secondary mt-2 w-full text-danger" type="button" disabled={canceling} onClick={() => onCancelPayment(row.paymentId!, cancelLabel)}>
+                  <XCircle className="h-4 w-4" aria-hidden />
+                  {canceling ? "Cancelando..." : "Excluir lancamento"}
+                </button>
+              ) : null}
+            </MobileRecord>
+          );
+        })}
       </div>
 
       <div className="desktop-table-wrap">
@@ -1893,28 +2004,43 @@ function FinancialRowsTable({ rows, onPaySaleInstallment }: { rows: FinancialRow
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.key}>
-                <td>{formatDate(row.date)}</td>
-                <td>{row.type === "MENSALIDADE" ? "Mensalidade" : row.type === "PRAZO" ? "Venda a prazo" : "Venda"}</td>
-                <td>{row.description}</td>
-                <td>{formatDate(row.dueDate)}</td>
-                <td>{formatDate(row.paidAt)}</td>
-                <td>{formatMoney(row.amount)}</td>
-                <td>{paymentMethodLabels[row.method] ?? row.method}</td>
-                <td><StatusBadge value={row.status} /></td>
-                <td>{row.notes || "-"}</td>
-                <td>
-                  {row.canPay ? (
-                    <button className="btn-secondary px-3 py-2 text-xs" type="button" onClick={() => onPaySaleInstallment(row)}>
-                      Pagar
-                    </button>
-                  ) : (
-                    <span className="text-ink/45">-</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const canceling = row.paymentId !== undefined && cancelingPaymentId === row.paymentId;
+              const cancelLabel = `${row.description.toLocaleLowerCase("pt-BR")} de ${formatMoney(row.amount)} com vencimento em ${formatDate(row.dueDate)}`;
+              return (
+                <tr key={row.key}>
+                  <td>{formatDate(row.date)}</td>
+                  <td>{row.type === "MENSALIDADE" ? "Mensalidade" : row.type === "PRAZO" ? "Venda a prazo" : "Venda"}</td>
+                  <td>{row.description}</td>
+                  <td>{formatDate(row.dueDate)}</td>
+                  <td>{formatDate(row.paidAt)}</td>
+                  <td>{formatMoney(row.amount)}</td>
+                  <td>{paymentMethodLabels[row.method] ?? row.method}</td>
+                  <td><StatusBadge value={row.status} /></td>
+                  <td>{row.notes || "-"}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-1.5">
+                      {row.canPay ? (
+                        <button className="btn-secondary px-3 py-2 text-xs" type="button" onClick={() => onPaySaleInstallment(row)}>
+                          Pagar
+                        </button>
+                      ) : null}
+                      {row.canCancel && row.paymentId !== undefined ? (
+                        <button
+                          className="btn-secondary px-3 py-2 text-xs text-danger"
+                          type="button"
+                          disabled={canceling}
+                          onClick={() => onCancelPayment(row.paymentId!, cancelLabel)}
+                        >
+                          {canceling ? "Cancelando..." : "Excluir"}
+                        </button>
+                      ) : null}
+                      {!row.canPay && !row.canCancel ? <span className="text-ink/45">-</span> : null}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

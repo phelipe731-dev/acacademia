@@ -49,6 +49,62 @@ def test_register_payment_and_student_history(client: TestClient) -> None:
     assert len(history.json()) == 1
 
 
+def test_reception_can_cancel_duplicate_payment(client: TestClient) -> None:
+    admin_headers = create_admin_and_headers(client)
+    student = create_student(client, admin_headers)
+    create_user = client.post(
+        "/users",
+        headers=admin_headers,
+        json={
+            "name": "Recepcao",
+            "email": "recepcao.cancelamento@example.com",
+            "password": "recepcao123",
+            "role": "RECEPCAO",
+            "is_active": True,
+        },
+    )
+    assert create_user.status_code == 201, create_user.text
+    login = client.post("/auth/login", json={"email": "recepcao.cancelamento@example.com", "password": "recepcao123"})
+    reception_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    payload = {
+        "student_id": student["id"],
+        "amount": 75,
+        "due_date": "2026-09-15",
+        "paid_at": "2026-09-01",
+        "status": "PAGO",
+        "payment_method": "PIX",
+        "notes": "OK",
+    }
+
+    first = client.post("/payments", headers=admin_headers, json=payload)
+    duplicate = client.post("/payments", headers=admin_headers, json=payload)
+    assert first.status_code == 201, first.text
+    assert duplicate.status_code == 201, duplicate.text
+
+    canceled = client.patch(
+        f"/payments/{duplicate.json()['id']}/cancel",
+        headers=reception_headers,
+        json={"reason": "Lancamento duplicado"},
+    )
+    assert canceled.status_code == 200, canceled.text
+    assert canceled.json()["status"] == "CANCELADO"
+    assert canceled.json()["paid_at"] is None
+    assert "Lancamento duplicado" in canceled.json()["notes"]
+
+    history = client.get(f"/students/{student['id']}/payments", headers=admin_headers)
+    assert history.status_code == 200
+    statuses = {payment["id"]: payment["status"] for payment in history.json()}
+    assert statuses[first.json()["id"]] == "PAGO"
+    assert statuses[duplicate.json()["id"]] == "CANCELADO"
+
+    second_cancel = client.patch(
+        f"/payments/{duplicate.json()['id']}/cancel",
+        headers=reception_headers,
+        json={"reason": "Tentativa repetida"},
+    )
+    assert second_cancel.status_code == 400
+
+
 def test_create_product_and_stock_entry(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     product = create_product(client, headers, stock=0)

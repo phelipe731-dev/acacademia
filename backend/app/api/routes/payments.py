@@ -11,7 +11,7 @@ from app.models.enums import PaymentStatus, UserRole
 from app.models.payment import Payment
 from app.models.student import Student
 from app.models.user import User
-from app.schemas.payment import PaymentCreate, PaymentRead, PaymentUpdate, PaymentWithStudent
+from app.schemas.payment import PaymentCancel, PaymentCreate, PaymentRead, PaymentUpdate, PaymentWithStudent
 from app.schemas.generation import MonthlyPaymentsGenerateRequest, MonthlyPaymentsGenerateResult
 from app.schemas.report import DefaulterReportRow
 from app.services.audit import model_snapshot, record_audit
@@ -144,6 +144,48 @@ def mark_payment_paid(
         entity_id=payment.id,
         action="PAY",
         summary=f"Mensalidade marcada como paga #{payment.id}.",
+        before=before,
+        after=model_snapshot(payment),
+    )
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+@router.patch("/{payment_id}/cancel", response_model=PaymentRead)
+def cancel_payment(
+    payment_id: int,
+    payload: PaymentCancel,
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
+    db: Session = Depends(get_db),
+) -> Payment:
+    payment = db.get(Payment, payment_id)
+    if payment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mensalidade nao encontrada.")
+    if payment.status == PaymentStatus.CANCELADO:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mensalidade ja cancelada.")
+
+    before = model_snapshot(payment)
+    reason = (payload.reason or "").strip()
+    payment.status = PaymentStatus.CANCELADO
+    payment.paid_at = None
+    if reason:
+        payment.notes = f"{payment.notes}\nCancelamento: {reason}" if payment.notes else f"Cancelamento: {reason}"
+    elif not payment.notes:
+        payment.notes = "Cancelamento operacional."
+    if payment.created_by_id is None:
+        payment.created_by_id = current_user.id
+
+    db.flush()
+    update_student_status_from_payments(db, payment.student_id)
+    db.flush()
+    record_audit(
+        db,
+        current_user,
+        entity_type="PAYMENT",
+        entity_id=payment.id,
+        action="CANCEL",
+        summary=f"Mensalidade cancelada #{payment.id}.",
         before=before,
         after=model_snapshot(payment),
     )

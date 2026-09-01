@@ -36,6 +36,10 @@ class PaymentUpdate(BaseModel):
     notes: str | None = None
 
 
+class PaymentCancel(BaseModel):
+    reason: str | None = Field(default=None, max_length=255)
+
+
 class PaymentRead(PaymentBase):
     id: int
     created_by_id: int | None
