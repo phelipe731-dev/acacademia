@@ -1,4 +1,5 @@
 import csv
+import calendar
 from datetime import date
 from decimal import Decimal
 from io import StringIO
@@ -33,7 +34,8 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 def default_dates(start_date: date | None, end_date: date | None) -> tuple[date, date]:
     today = business_today()
-    return start_date or today.replace(day=1), end_date or today
+    month_end = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+    return start_date or today.replace(day=1), end_date or month_end
 
 
 # Caracteres que, no inicio de uma celula, sao interpretados como formula por

@@ -122,6 +122,7 @@ def test_training_plan_exercise_can_be_edited_and_plan_can_be_cloned(client: Tes
             "monthly_fee": 120,
             "due_day": 10,
             "status": "ATIVO",
+            "create_initial_payment": False,
             "notes": None,
         },
     )

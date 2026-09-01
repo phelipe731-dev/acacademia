@@ -22,6 +22,7 @@ def _student_payload(**overrides) -> dict:
         "monthly_fee": 100,
         "due_day": 10,
         "status": "ATIVO",
+        "create_initial_payment": False,
         "notes": None,
     }
     base.update(overrides)

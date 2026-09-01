@@ -66,6 +66,7 @@ def create_student(client: TestClient, headers: dict[str, str]) -> dict:
             "monthly_fee": 120,
             "due_day": 10,
             "status": "ATIVO",
+            "create_initial_payment": False,
             "notes": None,
         },
     )
