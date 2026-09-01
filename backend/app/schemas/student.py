@@ -29,6 +29,7 @@ class StudentBase(BaseModel):
 
 class StudentCreate(StudentBase):
     address: str = Field(min_length=2, max_length=255)
+    create_initial_payment: bool = False
 
 
 class StudentUpdate(BaseModel):

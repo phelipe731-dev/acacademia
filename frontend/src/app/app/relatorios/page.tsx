@@ -8,6 +8,7 @@ import { EmptyState, PageHeader, SkeletonRows, getErrorMessage } from "@/compone
 import { apiDownload, apiFetch, formatDate, formatMoney } from "@/lib/api";
 import type {
   DefaulterReportRow,
+  OpenPaymentReportRow,
   PaymentReportRow,
   Product,
   RevenueReport,
@@ -28,6 +29,7 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState(firstDayOfMonth());
   const [endDate, setEndDate] = useState(today());
   const [payments, setPayments] = useState<PaymentReportRow[]>([]);
+  const [openPayments, setOpenPayments] = useState<OpenPaymentReportRow[]>([]);
   const [defaulters, setDefaulters] = useState<DefaulterReportRow[]>([]);
   const [sales, setSales] = useState<SaleReportRow[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -38,8 +40,9 @@ export default function ReportsPage() {
 
   async function load() {
     const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
-    const [paymentRows, defaulterRows, saleRows, topRows, lowRows, revenueData] = await Promise.all([
+    const [paymentRows, openPaymentRows, defaulterRows, saleRows, topRows, lowRows, revenueData] = await Promise.all([
       apiFetch<PaymentReportRow[]>(`/reports/payments-received?${params.toString()}`),
+      apiFetch<OpenPaymentReportRow[]>(`/reports/payments-open?${params.toString()}`),
       apiFetch<DefaulterReportRow[]>("/reports/defaulters"),
       apiFetch<SaleReportRow[]>(`/reports/sales?${params.toString()}`),
       apiFetch<TopProduct[]>(`/reports/top-products?${params.toString()}`),
@@ -47,6 +50,7 @@ export default function ReportsPage() {
       apiFetch<RevenueReport>(`/reports/revenue?${params.toString()}`)
     ]);
     setPayments(paymentRows);
+    setOpenPayments(openPaymentRows);
     setDefaulters(defaulterRows);
     setSales(saleRows);
     setTopProducts(topRows);
@@ -162,6 +166,28 @@ export default function ReportsPage() {
             <ReportCell label="Valor">{formatMoney(row.amount)}</ReportCell>
             <ReportCell label="Pagamento">{formatDate(row.paid_at)}</ReportCell>
             <ReportCell label="Vencimento">{formatDate(row.due_date)}</ReportCell>
+            <ReportCell label="Forma">{row.payment_method}</ReportCell>
+          </div>
+        )}
+      />
+
+      <ReportBlock
+        title="Mensalidades em aberto"
+        loading={loading}
+        onExport={() => handleExport(reportPath("/reports/payments-open.csv"), "mensalidades-em-aberto.csv")}
+        empty="Sem mensalidades abertas no periodo."
+        rows={openPayments}
+        render={(row) => (
+          <div key={row.id} className="grid gap-2 rounded-lg border border-line px-3.5 py-3 text-sm transition hover:bg-paper/70 md:grid-cols-6">
+            <ReportCell label="Aluno" strong>{row.student_name}</ReportCell>
+            <ReportCell label="Telefone">{row.phone}</ReportCell>
+            <ReportCell label="Vencimento">{formatDate(row.due_date)}</ReportCell>
+            <ReportCell label="Valor">{formatMoney(row.amount)}</ReportCell>
+            <ReportCell label="Status">
+              <span className={row.status === "ATRASADO" ? "font-semibold text-danger" : "font-semibold text-warning"}>
+                {row.status}
+              </span>
+            </ReportCell>
             <ReportCell label="Forma">{row.payment_method}</ReportCell>
           </div>
         )}

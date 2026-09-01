@@ -41,6 +41,7 @@ interface StudentFormState {
   monthly_fee: string;
   due_day: string;
   status: StudentStatus;
+  create_initial_payment: boolean;
   notes: string;
 }
 
@@ -57,6 +58,7 @@ interface StudentCreatePayload {
   monthly_fee: number;
   due_day: number;
   status: StudentStatus;
+  create_initial_payment: boolean;
   notes: string | null;
 }
 
@@ -90,6 +92,7 @@ function createEmptyStudentForm(): StudentFormState {
     monthly_fee: "0",
     due_day: "10",
     status: "ATIVO",
+    create_initial_payment: true,
     notes: ""
   };
 }
@@ -200,6 +203,7 @@ function buildStudentPayload(form: StudentFormState): StudentCreatePayload {
     monthly_fee: Number(String(form.monthly_fee).replace(",", ".")),
     due_day: Number(form.due_day),
     status: form.status,
+    create_initial_payment: form.create_initial_payment,
     notes: form.notes.trim() || null
   };
 }
@@ -826,6 +830,20 @@ export default function StudentsPage() {
                     onChange={(event) => setForm({ ...form, plan_end_date: event.target.value })}
                   />
                 </div>
+                <label className="flex items-start gap-3 rounded-lg border border-line bg-paper/60 p-3 md:col-span-2">
+                  <input
+                    className="mt-0.5 h-4 w-4 accent-brand"
+                    type="checkbox"
+                    checked={form.create_initial_payment}
+                    onChange={(event) => setForm({ ...form, create_initial_payment: event.target.checked })}
+                  />
+                  <span className="text-sm">
+                    <span className="block font-semibold text-ink">Criar mensalidade em aberto</span>
+                    <span className="mt-1 block text-ink/60">
+                      Gera a primeira cobranca pendente no proximo vencimento valido do aluno.
+                    </span>
+                  </span>
+                </label>
                 <div className="md:col-span-2">
                   <label className="label" htmlFor="student-notes">Observacoes</label>
                   <textarea

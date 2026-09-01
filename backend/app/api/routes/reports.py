@@ -20,6 +20,7 @@ from app.models.user import User
 from app.schemas.product import ProductRead
 from app.schemas.report import (
     DefaulterReportRow,
+    OpenPaymentReportRow,
     PaymentReportRow,
     RevenueReport,
     SaleReportRow,
@@ -106,6 +107,76 @@ def payments_received_csv(
                 "pagamento": row.paid_at,
                 "vencimento": row.due_date,
                 "forma": row.payment_method,
+            }
+            for row in rows
+        ],
+    )
+
+
+@router.get("/payments-open", response_model=list[OpenPaymentReportRow])
+def payments_open_report(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
+    db: Session = Depends(get_db),
+) -> list[OpenPaymentReportRow]:
+    start, end = default_dates(start_date, end_date)
+    refresh_all_student_statuses(db)
+    rows = db.execute(
+        select(
+            Payment.id,
+            Student.id,
+            Student.name,
+            Student.phone,
+            Payment.amount,
+            Payment.due_date,
+            Payment.status,
+            Payment.payment_method,
+        )
+        .join(Student, Student.id == Payment.student_id)
+        .where(
+            Payment.status.in_([PaymentStatus.PENDENTE, PaymentStatus.ATRASADO]),
+            Payment.due_date >= start,
+            Payment.due_date <= end,
+        )
+        .order_by(Payment.due_date.asc(), Student.name)
+    ).all()
+    db.commit()
+    return [
+        OpenPaymentReportRow(
+            id=row[0],
+            student_id=row[1],
+            student_name=row[2],
+            phone=row[3],
+            amount=row[4],
+            due_date=row[5],
+            status=row[6].value if hasattr(row[6], "value") else str(row[6]),
+            payment_method=row[7].value if hasattr(row[7], "value") else str(row[7]),
+        )
+        for row in rows
+    ]
+
+
+@router.get("/payments-open.csv")
+def payments_open_csv(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
+    db: Session = Depends(get_db),
+) -> Response:
+    rows = payments_open_report(start_date, end_date, _, db)
+    return csv_response(
+        "mensalidades-em-aberto.csv",
+        [
+            {
+                "id": row.id,
+                "student_id": row.student_id,
+                "aluno": row.student_name,
+                "telefone": row.phone,
+                "valor": row.amount,
+                "vencimento": row.due_date,
+                "status": row.status,
+                "forma_prevista": row.payment_method,
             }
             for row in rows
         ],

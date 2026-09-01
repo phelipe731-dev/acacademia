@@ -18,7 +18,7 @@ import type {
 } from "@/lib/types";
 
 const paymentMethods: PaymentMethod[] = ["DINHEIRO", "PIX", "CARTAO", "OUTRO"];
-const paymentStatuses: PaymentStatus[] = ["PAGO", "PENDENTE", "ATRASADO", "CANCELADO"];
+const paymentStatuses: PaymentStatus[] = ["PENDENTE", "PAGO", "ATRASADO", "CANCELADO"];
 
 export default function PaymentsPage() {
   const today = new Date().toISOString().slice(0, 10);
@@ -40,7 +40,7 @@ export default function PaymentsPage() {
     amount: "",
     due_date: today,
     paid_at: today,
-    status: "PAGO" as PaymentStatus,
+    status: "PENDENTE" as PaymentStatus,
     payment_method: "PIX" as PaymentMethod,
     notes: ""
   });

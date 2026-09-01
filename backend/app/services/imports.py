@@ -188,7 +188,7 @@ async def import_students_from_file(db: Session, file: UploadFile, current_user:
             seen_cpfs.add(payload.cpf)
         if email_key:
             seen_emails.add(email_key)
-        student = Student(**payload.model_dump())
+        student = Student(**payload.model_dump(exclude={"create_initial_payment"}))
         db.add(student)
         imported += 1
 

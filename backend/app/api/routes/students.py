@@ -21,7 +21,11 @@ from app.schemas.imports import StudentImportResult
 from app.schemas.student import StudentCreate, StudentRead, StudentUpdate
 from app.services.audit import model_snapshot, record_audit
 from app.services.imports import import_students_from_file
-from app.services.payments import refresh_all_student_statuses
+from app.services.payments import (
+    create_initial_student_payment,
+    refresh_all_student_statuses,
+    update_student_status_from_payments,
+)
 from app.services.students import ensure_student_is_unique
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -53,7 +57,7 @@ def create_student(
     db: Session = Depends(get_db),
 ) -> Student:
     ensure_student_is_unique(db, cpf=payload.cpf, email=payload.email)
-    data = payload.model_dump()
+    data = payload.model_dump(exclude={"create_initial_payment"})
     data["plan_start_date"] = data.get("plan_start_date") or business_today()
     student = Student(**data)
     db.add(student)
@@ -67,6 +71,9 @@ def create_student(
         summary=f"Aluno cadastrado: {student.name}.",
         after=model_snapshot(student),
     )
+    if payload.create_initial_payment:
+        create_initial_student_payment(db, student, current_user)
+        update_student_status_from_payments(db, student.id)
     db.commit()
     db.refresh(student)
     return student

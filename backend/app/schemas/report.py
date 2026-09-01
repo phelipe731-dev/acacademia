@@ -13,6 +13,17 @@ class PaymentReportRow(BaseModel):
     payment_method: str
 
 
+class OpenPaymentReportRow(BaseModel):
+    id: int
+    student_id: int
+    student_name: str
+    phone: str
+    amount: Decimal
+    due_date: date
+    status: str
+    payment_method: str
+
+
 class DefaulterReportRow(BaseModel):
     student_id: int
     student_name: str

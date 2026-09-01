@@ -24,6 +24,49 @@ def test_create_student(client: TestClient) -> None:
     assert len(response.json()) == 1
 
 
+def test_create_student_with_initial_open_payment(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    today = date.today()
+    response = client.post(
+        "/students",
+        headers=headers,
+        json={
+            "name": "Ana Costa",
+            "phone": "11984561234",
+            "email": "ana.inicial@example.com",
+            "cpf": None,
+            "address": "Rua Inicial, 10 - Centro",
+            "birth_date": None,
+            "plan": "Mensal",
+            "plan_start_date": str(today),
+            "monthly_fee": 75,
+            "due_day": today.day,
+            "status": "ATIVO",
+            "create_initial_payment": True,
+            "notes": None,
+        },
+    )
+    assert response.status_code == 201, response.text
+    student = response.json()
+
+    payments = client.get(f"/students/{student['id']}/payments", headers=headers)
+    assert payments.status_code == 200, payments.text
+    assert len(payments.json()) == 1
+    payment = payments.json()[0]
+    assert payment["amount"] == "75.00"
+    assert payment["due_date"] == str(today)
+    assert payment["status"] == "PENDENTE"
+
+    report = client.get(f"/reports/payments-open?start_date={today}&end_date={today}", headers=headers)
+    assert report.status_code == 200, report.text
+    assert report.json()[0]["id"] == payment["id"]
+
+    csv_response = client.get(f"/reports/payments-open.csv?start_date={today}&end_date={today}", headers=headers)
+    assert csv_response.status_code == 200
+    assert "mensalidades-em-aberto.csv" in csv_response.headers["content-disposition"]
+    assert "Ana Costa" in csv_response.text
+
+
 def test_register_payment_and_student_history(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     student = create_student(client, headers)

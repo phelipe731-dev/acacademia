@@ -9,7 +9,7 @@ from app.models.payment import Payment
 from app.models.sale import SaleInstallment
 from app.models.student import Student
 from app.models.user import User
-from app.services.audit import record_audit
+from app.services.audit import model_snapshot, record_audit
 from app.services.sales import refresh_overdue_sale_installments
 
 
@@ -87,6 +87,62 @@ def refresh_all_student_statuses(db: Session) -> None:
 def due_date_for_month(year: int, month: int, due_day: int) -> date:
     last_day = calendar.monthrange(year, month)[1]
     return date(year, month, min(due_day, last_day))
+
+
+def next_due_date(due_day: int, reference: date | None = None) -> date:
+    current_day = reference or date.today()
+    due_date = due_date_for_month(current_day.year, current_day.month, due_day)
+    if due_date >= current_day:
+        return due_date
+
+    year = current_day.year + 1 if current_day.month == 12 else current_day.year
+    month = 1 if current_day.month == 12 else current_day.month + 1
+    return due_date_for_month(year, month, due_day)
+
+
+def create_initial_student_payment(db: Session, student: Student, current_user: User) -> Payment | None:
+    if student.status != StudentStatus.ATIVO or student.monthly_fee <= 0:
+        return None
+
+    today = date.today()
+    reference = max(today, student.plan_start_date or today)
+    due_date = next_due_date(student.due_day, reference)
+    if student.plan_end_date and due_date > student.plan_end_date:
+        return None
+
+    exists = db.scalar(
+        select(Payment.id).where(
+            Payment.student_id == student.id,
+            Payment.due_date == due_date,
+            Payment.status != PaymentStatus.CANCELADO,
+        )
+    )
+    if exists:
+        return None
+
+    payment = Payment(
+        student_id=student.id,
+        amount=student.monthly_fee,
+        due_date=due_date,
+        paid_at=None,
+        status=PaymentStatus.PENDENTE,
+        payment_method=PaymentMethod.PIX,
+        notes="Mensalidade inicial gerada no cadastro do aluno.",
+        created_by_id=current_user.id,
+    )
+    normalize_payment_status(payment)
+    db.add(payment)
+    db.flush()
+    record_audit(
+        db,
+        current_user,
+        entity_type="PAYMENT",
+        entity_id=payment.id,
+        action="CREATE",
+        summary=f"Mensalidade inicial criada para aluno #{student.id}.",
+        after=model_snapshot(payment),
+    )
+    return payment
 
 
 def generate_monthly_payments(db: Session, current_user: User, year: int, month: int) -> tuple[int, int, list[date]]:

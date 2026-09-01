@@ -207,6 +207,17 @@ export interface PaymentReportRow {
   payment_method: string;
 }
 
+export interface OpenPaymentReportRow {
+  id: number;
+  student_id: number;
+  student_name: string;
+  phone: string;
+  amount: string;
+  due_date: string;
+  status: PaymentStatus;
+  payment_method: string;
+}
+
 export interface SaleReportRow {
   id: number;
   created_at: string;
