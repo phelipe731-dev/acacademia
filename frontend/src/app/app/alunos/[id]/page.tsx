@@ -252,6 +252,13 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
   const [saving, setSaving] = useState(false);
   const [cancelingPaymentId, setCancelingPaymentId] = useState<number | null>(null);
+  const [savingMonthlyPayment, setSavingMonthlyPayment] = useState(false);
+  const [monthlyPaymentForm, setMonthlyPaymentForm] = useState<{
+    id: number;
+    paid_at: string;
+    payment_method: PaymentMethod;
+    notes: string;
+  } | null>(null);
   const [savingSaleInstallmentPayment, setSavingSaleInstallmentPayment] = useState(false);
   const [saleInstallmentPaymentForm, setSaleInstallmentPaymentForm] = useState<{
     id: number;
@@ -415,6 +422,40 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       setMessage({ text: getErrorMessage(error, "Erro ao inativar ficha."), type: "error" });
     } finally {
       setDeactivatingPlanId(null);
+    }
+  }
+
+  function openMonthlyPayment(row: FinancialRow) {
+    if (!row.paymentId) return;
+    setMonthlyPaymentForm({
+      id: row.paymentId,
+      paid_at: todayDateInput(),
+      payment_method: isPaymentMethod(row.method) ? row.method : "PIX",
+      notes: row.notes || ""
+    });
+  }
+
+  async function handleMonthlyPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!monthlyPaymentForm || savingMonthlyPayment) return;
+    setSavingMonthlyPayment(true);
+    setMessage(null);
+    try {
+      await apiFetch(`/payments/${monthlyPaymentForm.id}/pay`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          paid_at: monthlyPaymentForm.paid_at || null,
+          payment_method: monthlyPaymentForm.payment_method,
+          notes: monthlyPaymentForm.notes || null
+        })
+      });
+      setMonthlyPaymentForm(null);
+      setMessage({ text: "Mensalidade marcada como paga.", type: "success" });
+      await load(role);
+    } catch (error) {
+      setMessage({ text: getErrorMessage(error, "Erro ao dar baixa na mensalidade."), type: "error" });
+    } finally {
+      setSavingMonthlyPayment(false);
     }
   }
 
@@ -647,6 +688,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       description: "Mensalidade",
       notes: payment.notes,
       paymentId: payment.id,
+      canPay: payment.status === "PENDENTE" || payment.status === "ATRASADO",
       canCancel: payment.status !== "CANCELADO"
     }));
     sales.forEach((sale) => {
@@ -812,6 +854,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
           installmentSales={installmentSales}
           cancelingPaymentId={cancelingPaymentId}
           onCancelPayment={handleCancelPayment}
+          onPayPayment={openMonthlyPayment}
           onPaySaleInstallment={openSaleInstallmentPayment}
           openSaleInstallments={openSaleInstallments}
           openSaleInstallmentsTotal={openSaleInstallmentsTotal}
@@ -869,11 +912,27 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
         />
       ) : null}
 
+      {monthlyPaymentForm ? (
+        <SaleInstallmentPaymentModal
+          description="Baixa da mensalidade pendente selecionada."
+          form={monthlyPaymentForm}
+          idPrefix="monthly-payment"
+          saving={savingMonthlyPayment}
+          setForm={setMonthlyPaymentForm}
+          title="Dar baixa na mensalidade"
+          onClose={() => setMonthlyPaymentForm(null)}
+          onSubmit={handleMonthlyPayment}
+        />
+      ) : null}
+
       {saleInstallmentPaymentForm ? (
         <SaleInstallmentPaymentModal
+          description="Baixa de fatura de venda a prazo."
           form={saleInstallmentPaymentForm}
+          idPrefix="sale-installment"
           saving={savingSaleInstallmentPayment}
           setForm={setSaleInstallmentPaymentForm}
+          title="Registrar pagamento"
           onClose={() => setSaleInstallmentPaymentForm(null)}
           onSubmit={handleSaleInstallmentPayment}
         />
@@ -1031,7 +1090,7 @@ function QuickActions({
           <>
             <Link className="btn-primary w-full" href={`/app/mensalidades?student_id=${student.id}&amount=${student.monthly_fee}`}>
               <Receipt className="h-4 w-4" aria-hidden />
-              Registrar mensalidade
+              Nova mensalidade
             </Link>
             <Link className="btn-secondary w-full" href={`/app/frequencia?student_id=${student.id}`}>
               <UserCheck className="h-4 w-4" aria-hidden />
@@ -1301,6 +1360,7 @@ function FinancialTab({
   financialType,
   installmentSales,
   onCancelPayment,
+  onPayPayment,
   onPaySaleInstallment,
   openPayments,
   openPaymentsTotal,
@@ -1325,6 +1385,7 @@ function FinancialTab({
   financialType: FinancialTypeFilter;
   installmentSales: Sale[];
   onCancelPayment: (paymentId: number, label: string) => void;
+  onPayPayment: (row: FinancialRow) => void;
   onPaySaleInstallment: (row: FinancialRow) => void;
   openPayments: Payment[];
   openPaymentsTotal: number;
@@ -1407,6 +1468,7 @@ function FinancialTab({
             <FinancialRowsTable
               cancelingPaymentId={cancelingPaymentId}
               onCancelPayment={onCancelPayment}
+              onPayPayment={onPayPayment}
               onPaySaleInstallment={onPaySaleInstallment}
               rows={filteredRows}
             />
@@ -1945,14 +2007,24 @@ function PaymentsTable({
 function FinancialRowsTable({
   cancelingPaymentId,
   onCancelPayment,
+  onPayPayment,
   onPaySaleInstallment,
   rows
 }: {
   cancelingPaymentId: number | null;
   onCancelPayment: (paymentId: number, label: string) => void;
+  onPayPayment: (row: FinancialRow) => void;
   onPaySaleInstallment: (row: FinancialRow) => void;
   rows: FinancialRow[];
 }) {
+  function handlePay(row: FinancialRow) {
+    if (row.paymentId !== undefined) {
+      onPayPayment(row);
+      return;
+    }
+    onPaySaleInstallment(row);
+  }
+
   return (
     <>
       <div className="mobile-card-list">
@@ -1971,7 +2043,7 @@ function FinancialRowsTable({
               <MobileRecordRow label="Tipo" value={row.type === "MENSALIDADE" ? "Mensalidade" : row.type === "PRAZO" ? "Venda a prazo" : "Venda"} />
               <MobileRecordRow label="Obs." value={row.notes || "-"} />
               {row.canPay ? (
-                <button className="btn-primary mt-3 w-full" type="button" onClick={() => onPaySaleInstallment(row)}>
+                <button className="btn-primary mt-3 w-full" type="button" onClick={() => handlePay(row)}>
                   <CheckCircle2 className="h-4 w-4" aria-hidden />
                   Registrar pagamento
                 </button>
@@ -2021,7 +2093,7 @@ function FinancialRowsTable({
                   <td>
                     <div className="flex flex-wrap gap-1.5">
                       {row.canPay ? (
-                        <button className="btn-secondary px-3 py-2 text-xs" type="button" onClick={() => onPaySaleInstallment(row)}>
+                        <button className="btn-secondary px-3 py-2 text-xs" type="button" onClick={() => handlePay(row)}>
                           Pagar
                         </button>
                       ) : null}
@@ -2049,17 +2121,23 @@ function FinancialRowsTable({
 }
 
 function SaleInstallmentPaymentModal({
+  description,
   form,
+  idPrefix,
   onClose,
   onSubmit,
   saving,
-  setForm
+  setForm,
+  title
 }: {
+  description: string;
   form: { id: number; paid_at: string; payment_method: PaymentMethod; notes: string };
+  idPrefix: string;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   saving: boolean;
   setForm: (form: { id: number; paid_at: string; payment_method: PaymentMethod; notes: string } | null) => void;
+  title: string;
 }) {
   const methods: PaymentMethod[] = ["PIX", "DINHEIRO", "CARTAO", "OUTRO"];
 
@@ -2068,8 +2146,8 @@ function SaleInstallmentPaymentModal({
       <form onSubmit={onSubmit} className="panel w-full max-w-md p-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="panel-title">Registrar pagamento</h2>
-            <p className="mt-1 text-sm text-ink/60">Baixa de fatura de venda a prazo.</p>
+            <h2 className="panel-title">{title}</h2>
+            <p className="mt-1 text-sm text-ink/60">{description}</p>
           </div>
           <button className="btn-secondary px-3 py-2" type="button" onClick={onClose} aria-label="Fechar">
             <X className="h-4 w-4" aria-hidden />
@@ -2077,9 +2155,9 @@ function SaleInstallmentPaymentModal({
         </div>
 
         <div className="mt-5 grid gap-4">
-          <Field label="Data do pagamento" id="sale-installment-paid-at">
+          <Field label="Data do pagamento" id={`${idPrefix}-paid-at`}>
             <input
-              id="sale-installment-paid-at"
+              id={`${idPrefix}-paid-at`}
               className="field"
               required
               type="date"
@@ -2087,9 +2165,9 @@ function SaleInstallmentPaymentModal({
               onChange={(event) => setForm({ ...form, paid_at: event.target.value })}
             />
           </Field>
-          <Field label="Forma de pagamento" id="sale-installment-payment-method">
+          <Field label="Forma de pagamento" id={`${idPrefix}-payment-method`}>
             <select
-              id="sale-installment-payment-method"
+              id={`${idPrefix}-payment-method`}
               className="field"
               value={form.payment_method}
               onChange={(event) => setForm({ ...form, payment_method: event.target.value as PaymentMethod })}
@@ -2099,9 +2177,9 @@ function SaleInstallmentPaymentModal({
               ))}
             </select>
           </Field>
-          <Field label="Observacao" id="sale-installment-payment-notes">
+          <Field label="Observacao" id={`${idPrefix}-payment-notes`}>
             <input
-              id="sale-installment-payment-notes"
+              id={`${idPrefix}-payment-notes`}
               className="field"
               placeholder="Opcional"
               value={form.notes}

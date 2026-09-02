@@ -31,6 +31,7 @@ def list_payments(
     student_id: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    include_canceled: bool = False,
     _: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
     db: Session = Depends(get_db),
 ) -> list[Payment]:
@@ -38,6 +39,8 @@ def list_payments(
     stmt = select(Payment).options(selectinload(Payment.student), selectinload(Payment.created_by)).order_by(Payment.due_date.desc())
     if status_filter:
         stmt = stmt.where(Payment.status == status_filter)
+    elif not include_canceled:
+        stmt = stmt.where(Payment.status != PaymentStatus.CANCELADO)
     if student_id:
         stmt = stmt.where(Payment.student_id == student_id)
     if start_date:
@@ -58,6 +61,56 @@ def create_payment(
     student = db.get(Student, payload.student_id)
     if student is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
+
+    existing_open = db.scalars(
+        select(Payment)
+        .where(
+            Payment.student_id == payload.student_id,
+            Payment.due_date == payload.due_date,
+            Payment.status.in_([PaymentStatus.PENDENTE, PaymentStatus.ATRASADO]),
+        )
+        .order_by(Payment.id)
+    ).first()
+    if payload.status == PaymentStatus.PAGO and existing_open is not None:
+        before = model_snapshot(existing_open)
+        existing_open.amount = payload.amount
+        existing_open.status = PaymentStatus.PAGO
+        existing_open.paid_at = payload.paid_at or date.today()
+        existing_open.payment_method = payload.payment_method
+        existing_open.notes = payload.notes if payload.notes is not None else existing_open.notes
+        if existing_open.created_by_id is None:
+            existing_open.created_by_id = current_user.id
+        normalize_payment_status(existing_open)
+        db.flush()
+        update_student_status_from_payments(db, student.id)
+        db.flush()
+        record_audit(
+            db,
+            current_user,
+            entity_type="PAYMENT",
+            entity_id=existing_open.id,
+            action="PAY",
+            summary=f"Mensalidade existente quitada para aluno #{student.id}.",
+            before=before,
+            after=model_snapshot(existing_open),
+        )
+        db.commit()
+        db.refresh(existing_open)
+        return existing_open
+
+    existing_payment_id = db.scalar(
+        select(Payment.id).where(
+            Payment.student_id == payload.student_id,
+            Payment.due_date == payload.due_date,
+            Payment.status != PaymentStatus.CANCELADO,
+        )
+    )
+    if existing_payment_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ja existe mensalidade para este aluno neste vencimento. Use a baixa do lancamento existente.",
+        )
+
     payment = Payment(**payload.model_dump(), created_by_id=current_user.id)
     normalize_payment_status(payment)
     db.add(payment)

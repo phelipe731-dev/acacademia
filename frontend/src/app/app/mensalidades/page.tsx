@@ -237,7 +237,7 @@ export default function PaymentsPage() {
             <div>
               <label className="label" htmlFor="payments-filter-status">Filtrar por status</label>
               <select id="payments-filter-status" className="field sm:max-w-[220px]" value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="">Todos</option>
+                <option value="">Ativos</option>
                 {paymentStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </div>

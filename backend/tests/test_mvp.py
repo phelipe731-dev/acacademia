@@ -2,7 +2,9 @@ from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import create_admin_and_headers, create_product, create_student
+from app.models.enums import PaymentMethod, PaymentStatus
+from app.models.payment import Payment
+from tests.conftest import TestingSessionLocal, create_admin_and_headers, create_product, create_student
 
 
 def test_initial_admin_login_and_me(client: TestClient) -> None:
@@ -93,6 +95,65 @@ def test_register_payment_and_student_history(client: TestClient) -> None:
     assert len(history.json()) == 1
 
 
+def test_manual_paid_registration_settles_existing_open_payment(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+    due_date = date.today().replace(day=20)
+
+    pending = client.post(
+        "/payments",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "amount": 75,
+            "due_date": str(due_date),
+            "paid_at": None,
+            "status": "PENDENTE",
+            "payment_method": "PIX",
+            "notes": "Mensalidade inicial",
+        },
+    )
+    assert pending.status_code == 201, pending.text
+
+    paid = client.post(
+        "/payments",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "amount": 75,
+            "due_date": str(due_date),
+            "paid_at": str(date.today()),
+            "status": "PAGO",
+            "payment_method": "PIX",
+            "notes": "Pago no balcao",
+        },
+    )
+    assert paid.status_code == 201, paid.text
+    assert paid.json()["id"] == pending.json()["id"]
+    assert paid.json()["status"] == "PAGO"
+    assert paid.json()["paid_at"] == str(date.today())
+
+    history = client.get(f"/students/{student['id']}/payments", headers=headers)
+    assert history.status_code == 200
+    assert len(history.json()) == 1
+    assert history.json()[0]["status"] == "PAGO"
+
+    duplicate = client.post(
+        "/payments",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "amount": 75,
+            "due_date": str(due_date),
+            "paid_at": None,
+            "status": "PENDENTE",
+            "payment_method": "PIX",
+            "notes": None,
+        },
+    )
+    assert duplicate.status_code == 400
+
+
 def test_reception_can_cancel_duplicate_payment(client: TestClient) -> None:
     admin_headers = create_admin_and_headers(client)
     student = create_student(client, admin_headers)
@@ -121,12 +182,24 @@ def test_reception_can_cancel_duplicate_payment(client: TestClient) -> None:
     }
 
     first = client.post("/payments", headers=admin_headers, json=payload)
-    duplicate = client.post("/payments", headers=admin_headers, json=payload)
     assert first.status_code == 201, first.text
-    assert duplicate.status_code == 201, duplicate.text
+
+    with TestingSessionLocal() as db:
+        duplicate_payment = Payment(
+            student_id=student["id"],
+            amount=75,
+            due_date=date(2026, 9, 15),
+            paid_at=date(2026, 9, 1),
+            status=PaymentStatus.PAGO,
+            payment_method=PaymentMethod.PIX,
+            notes="OK",
+        )
+        db.add(duplicate_payment)
+        db.commit()
+        duplicate_id = duplicate_payment.id
 
     canceled = client.patch(
-        f"/payments/{duplicate.json()['id']}/cancel",
+        f"/payments/{duplicate_id}/cancel",
         headers=reception_headers,
         json={"reason": "Lancamento duplicado"},
     )
@@ -139,10 +212,18 @@ def test_reception_can_cancel_duplicate_payment(client: TestClient) -> None:
     assert history.status_code == 200
     statuses = {payment["id"]: payment["status"] for payment in history.json()}
     assert statuses[first.json()["id"]] == "PAGO"
-    assert statuses[duplicate.json()["id"]] == "CANCELADO"
+    assert statuses[duplicate_id] == "CANCELADO"
+
+    default_list = client.get("/payments", headers=admin_headers)
+    assert default_list.status_code == 200
+    assert duplicate_id not in {payment["id"] for payment in default_list.json()}
+
+    canceled_list = client.get("/payments?status=CANCELADO", headers=admin_headers)
+    assert canceled_list.status_code == 200
+    assert duplicate_id in {payment["id"] for payment in canceled_list.json()}
 
     second_cancel = client.patch(
-        f"/payments/{duplicate.json()['id']}/cancel",
+        f"/payments/{duplicate_id}/cancel",
         headers=reception_headers,
         json={"reason": "Tentativa repetida"},
     )
