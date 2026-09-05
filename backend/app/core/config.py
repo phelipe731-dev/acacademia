@@ -21,7 +21,12 @@ class Settings(BaseSettings):
     # Marca o cookie como Secure fora de "local". Sobrescreva para False se rodar
     # producao sem HTTPS na frente (nao recomendado).
     auth_cookie_secure: bool | None = None
-    backend_cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    backend_cors_origins: Annotated[list[str], NoDecode] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3010",
+        "http://127.0.0.1:3010",
+    ]
     auto_create_admin: bool = True
     first_admin_name: str = "Administrador"
     first_admin_email: str = "admin@acacademia.com.br"

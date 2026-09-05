@@ -20,7 +20,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: BACKEND_CORS_ORIGINS
-        value: https://acacademia.netlify.app
+        value: https://acacademia.netlify.app,http://localhost:3000,http://127.0.0.1:3000,http://localhost:3010,http://127.0.0.1:3010
       - key: FRONTEND_PUBLIC_URL
         value: https://acacademia.netlify.app
       - key: AUTO_CREATE_ADMIN

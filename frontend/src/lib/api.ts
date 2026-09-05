@@ -101,7 +101,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ApiError("A operacao demorou demais. Verifique sua conexao e tente novamente.", 408);
     }
-    throw error;
+    throw new ApiError(
+      "Nao foi possivel conectar com a API. Verifique se o backend esta no ar e se a origem atual esta liberada no CORS.",
+      0,
+    );
   } finally {
     window.clearTimeout(timeout);
   }
