@@ -1,9 +1,11 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 
@@ -27,6 +29,9 @@ from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.user import UserCreate
 from app.services.users import create_user, has_admin
+
+logger = logging.getLogger("acacademia")
+
 
 def seed_initial_admin() -> None:
     if not settings.auto_create_admin:
@@ -77,6 +82,15 @@ def health() -> dict[str, str]:
     return {"status": "ok", "app": settings.app_name}
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Erro interno em %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Erro interno no servidor. Tente novamente em alguns instantes."},
+    )
+
+
 app.include_router(auth.router)
 app.include_router(audit.router)
 app.include_router(users.router)
@@ -89,3 +103,13 @@ app.include_router(checkins.router)
 app.include_router(training.router)
 app.include_router(dashboard.router)
 app.include_router(reports.router)
+
+fastapi_app = app
+app = CORSMiddleware(
+    fastapi_app,
+    allow_origins=settings.backend_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.dependency_overrides = fastapi_app.dependency_overrides
