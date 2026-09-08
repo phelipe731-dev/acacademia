@@ -10,7 +10,7 @@ from app.schemas.user import UserRead
 
 class PaymentBase(BaseModel):
     student_id: int
-    amount: Decimal = Field(gt=0)
+    amount: Decimal
     due_date: date
     paid_at: date | None = None
     status: PaymentStatus = PaymentStatus.PENDENTE
@@ -24,7 +24,7 @@ class PaymentBase(BaseModel):
 
 
 class PaymentCreate(PaymentBase):
-    pass
+    amount: Decimal = Field(gt=0)
 
 
 class PaymentUpdate(BaseModel):
