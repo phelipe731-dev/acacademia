@@ -81,6 +81,8 @@ type SaleInstallmentEntry = {
   sale: Sale;
   installment: NonNullable<Sale["installments"]>[number];
 };
+type PaymentSplitForm = { payment_method: PaymentMethod; amount: string };
+type PaymentForm = { id: number; paid_at: string; payment_method: PaymentMethod; notes: string; splits?: PaymentSplitForm[] };
 
 const tabs: Array<{ id: DetailTab; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visao geral", icon: LayoutGrid },
@@ -109,6 +111,13 @@ function salePaymentLabel(sale: Sale) {
   if (sale.payment_method !== "PRAZO") return paymentMethodLabels[sale.payment_method] ?? sale.payment_method;
   const method = sale.installment_payment_method ? ` via ${paymentMethodLabels[sale.installment_payment_method] ?? sale.installment_payment_method}` : "";
   return `Prazo · ${sale.installments_count}x${method}`;
+}
+
+function monthlyPaymentLabel(payment: Payment) {
+  if (!payment.splits?.length) return paymentMethodLabels[payment.payment_method] ?? payment.payment_method;
+  return payment.splits
+    .map((split) => `${paymentMethodLabels[split.payment_method] ?? split.payment_method} ${formatMoney(split.amount)}`)
+    .join(" + ");
 }
 
 function saleItemsLabel(sale: Sale) {
@@ -253,19 +262,9 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
   const [saving, setSaving] = useState(false);
   const [cancelingPaymentId, setCancelingPaymentId] = useState<number | null>(null);
   const [savingMonthlyPayment, setSavingMonthlyPayment] = useState(false);
-  const [monthlyPaymentForm, setMonthlyPaymentForm] = useState<{
-    id: number;
-    paid_at: string;
-    payment_method: PaymentMethod;
-    notes: string;
-  } | null>(null);
+  const [monthlyPaymentForm, setMonthlyPaymentForm] = useState<PaymentForm | null>(null);
   const [savingSaleInstallmentPayment, setSavingSaleInstallmentPayment] = useState(false);
-  const [saleInstallmentPaymentForm, setSaleInstallmentPaymentForm] = useState<{
-    id: number;
-    paid_at: string;
-    payment_method: PaymentMethod;
-    notes: string;
-  } | null>(null);
+  const [saleInstallmentPaymentForm, setSaleInstallmentPaymentForm] = useState<PaymentForm | null>(null);
   const [creatingPlan, setCreatingPlan] = useState(false);
   const [cloningPlanId, setCloningPlanId] = useState<number | null>(null);
   const [deactivatingPlanId, setDeactivatingPlanId] = useState<number | null>(null);
@@ -431,7 +430,8 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       id: row.paymentId,
       paid_at: todayDateInput(),
       payment_method: isPaymentMethod(row.method) ? row.method : "PIX",
-      notes: row.notes || ""
+      notes: row.notes || "",
+      splits: [{ payment_method: isPaymentMethod(row.method) ? row.method : "PIX", amount: String(row.amount) }]
     });
   }
 
@@ -446,6 +446,10 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({
           paid_at: monthlyPaymentForm.paid_at || null,
           payment_method: monthlyPaymentForm.payment_method,
+          splits: monthlyPaymentForm.splits?.map((split) => ({
+            payment_method: split.payment_method,
+            amount: Number(split.amount),
+          })),
           notes: monthlyPaymentForm.notes || null
         })
       });
@@ -612,7 +616,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       tone: "success" as const,
       title: "Aluno em dia",
       description: latestPaidPayment
-        ? `Ultimo pagamento em ${formatDate(latestPaidPayment.paid_at || latestPaidPayment.due_date)} via ${paymentMethodLabels[latestPaidPayment.payment_method] ?? latestPaidPayment.payment_method}.`
+        ? `Ultimo pagamento em ${formatDate(latestPaidPayment.paid_at || latestPaidPayment.due_date)} via ${monthlyPaymentLabel(latestPaidPayment)}.`
         : "Nenhuma pendencia financeira registrada.",
       icon: CheckCircle2
     };
@@ -627,7 +631,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
         key: `payment-${payment.id}-${payment.updated_at}`,
         icon: canceled ? XCircle : payment.status === "PAGO" ? CheckCircle2 : Receipt,
         title: canceled ? "Mensalidade cancelada" : payment.status === "PAGO" ? "Mensalidade paga" : payment.status === "ATRASADO" ? "Mensalidade vencida" : "Mensalidade registrada",
-        description: `${formatMoney(payment.amount)}${payment.payment_method ? ` via ${paymentMethodLabels[payment.payment_method] ?? payment.payment_method}` : ""}`,
+        description: `${formatMoney(payment.amount)} via ${monthlyPaymentLabel(payment)}`,
         at: payment.paid_at || payment.updated_at || payment.created_at || payment.due_date,
         tone: canceled ? "red" : payment.status === "PAGO" ? "green" : payment.status === "ATRASADO" ? "red" : "orange"
       });
@@ -682,7 +686,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       dueDate: payment.due_date,
       paidAt: payment.paid_at,
       amount: payment.amount,
-      method: payment.payment_method,
+      method: monthlyPaymentLabel(payment),
       status: payment.status,
       type: "MENSALIDADE",
       description: "Mensalidade",
@@ -2131,15 +2135,34 @@ function SaleInstallmentPaymentModal({
   title
 }: {
   description: string;
-  form: { id: number; paid_at: string; payment_method: PaymentMethod; notes: string };
+  form: PaymentForm;
   idPrefix: string;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   saving: boolean;
-  setForm: (form: { id: number; paid_at: string; payment_method: PaymentMethod; notes: string } | null) => void;
+  setForm: (form: PaymentForm | null) => void;
   title: string;
 }) {
   const methods: PaymentMethod[] = ["PIX", "DINHEIRO", "CARTAO", "OUTRO"];
+  const updateSplit = (index: number, patch: Partial<PaymentSplitForm>) => {
+    setForm({
+      ...form,
+      splits: form.splits?.map((split, splitIndex) => splitIndex === index ? { ...split, ...patch } : split),
+    });
+  };
+  const addSplit = () => {
+    setForm({
+      ...form,
+      splits: [...(form.splits ?? []), { payment_method: "DINHEIRO", amount: "" }],
+    });
+  };
+  const removeSplit = (index: number) => {
+    if (!form.splits || form.splits.length <= 1) return;
+    setForm({
+      ...form,
+      splits: form.splits.filter((_, splitIndex) => splitIndex !== index),
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center" role="dialog" aria-modal="true">
@@ -2170,13 +2193,57 @@ function SaleInstallmentPaymentModal({
               id={`${idPrefix}-payment-method`}
               className="field"
               value={form.payment_method}
-              onChange={(event) => setForm({ ...form, payment_method: event.target.value as PaymentMethod })}
+              onChange={(event) => setForm({
+                ...form,
+                payment_method: event.target.value as PaymentMethod,
+                splits: form.splits?.length === 1 ? [{ ...form.splits[0], payment_method: event.target.value as PaymentMethod }] : form.splits
+              })}
             >
               {methods.map((method) => (
                 <option key={method} value={method}>{paymentMethodLabels[method] ?? method}</option>
               ))}
             </select>
           </Field>
+          {form.splits ? (
+            <div className="rounded-lg border border-line p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-ink">Composicao</p>
+                <button className="btn-secondary px-3 py-2 text-xs" type="button" onClick={addSplit}>
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Forma
+                </button>
+              </div>
+              <div className="space-y-2">
+                {form.splits.map((split, index) => (
+                  <div key={index} className="grid gap-2 sm:grid-cols-[1fr_120px_auto]">
+                    <select
+                      className="field"
+                      aria-label="Forma da composicao"
+                      value={split.payment_method}
+                      onChange={(event) => updateSplit(index, { payment_method: event.target.value as PaymentMethod })}
+                    >
+                      {methods.map((method) => (
+                        <option key={method} value={method}>{paymentMethodLabels[method] ?? method}</option>
+                      ))}
+                    </select>
+                    <input
+                      className="field"
+                      aria-label="Valor da composicao"
+                      required
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={split.amount}
+                      onChange={(event) => updateSplit(index, { amount: event.target.value })}
+                    />
+                    <button className="btn-secondary px-3 py-2 text-xs" type="button" disabled={(form.splits?.length ?? 0) <= 1} onClick={() => removeSplit(index)}>
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <Field label="Observacao" id={`${idPrefix}-payment-notes`}>
             <input
               id={`${idPrefix}-payment-notes`}

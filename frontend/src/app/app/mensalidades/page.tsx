@@ -19,6 +19,32 @@ import type {
 
 const paymentMethods: PaymentMethod[] = ["DINHEIRO", "PIX", "CARTAO", "OUTRO"];
 const paymentStatuses: PaymentStatus[] = ["PENDENTE", "PAGO", "ATRASADO", "CANCELADO"];
+type PaymentSplitForm = { payment_method: PaymentMethod; amount: string };
+
+function paymentSplitLabel(payment: Payment) {
+  if (!payment.splits?.length) return payment.payment_method;
+  return payment.splits
+    .map((split) => `${split.payment_method} ${formatMoney(split.amount)}`)
+    .join(" + ");
+}
+
+function parseSplitPrompt(value: string | null): PaymentSplitForm[] | null {
+  if (value === null) return null;
+  const rows = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [method, amount] = part.split(":").map((item) => item.trim());
+      const upperMethod = method?.toUpperCase() as PaymentMethod;
+      if (!paymentMethods.includes(upperMethod) || !amount || Number(amount.replace(",", ".")) <= 0) {
+        throw new Error("Use o formato CARTAO:50,DINHEIRO:25.");
+      }
+      return { payment_method: upperMethod, amount: amount.replace(",", ".") };
+    });
+  if (rows.length === 0) throw new Error("Informe ao menos uma forma de pagamento.");
+  return rows;
+}
 
 export default function PaymentsPage() {
   const today = new Date().toISOString().slice(0, 10);
@@ -42,6 +68,7 @@ export default function PaymentsPage() {
     paid_at: today,
     status: "PENDENTE" as PaymentStatus,
     payment_method: "PIX" as PaymentMethod,
+    splits: [{ payment_method: "PIX" as PaymentMethod, amount: "" }],
     notes: ""
   });
 
@@ -95,11 +122,14 @@ export default function PaymentsPage() {
           paid_at: form.status === "PAGO" ? form.paid_at : null,
           status: form.status,
           payment_method: form.payment_method,
+          splits: form.status === "PAGO"
+            ? form.splits.map((split) => ({ payment_method: split.payment_method, amount: Number(split.amount) }))
+            : null,
           notes: form.notes || null
         })
       });
       setMessage({ text: "Mensalidade registrada.", type: "success" });
-      setForm({ ...form, amount: "", notes: "" });
+      setForm({ ...form, amount: "", splits: [{ payment_method: form.payment_method, amount: "" }], notes: "" });
       await load();
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao registrar mensalidade."), type: "error" });
@@ -110,12 +140,29 @@ export default function PaymentsPage() {
 
   async function markPaid(payment: Payment) {
     if (payingId !== null) return;
+    let splits: PaymentSplitForm[] | null;
+    try {
+      splits = parseSplitPrompt(
+        window.prompt(
+          "Como foi pago? Use FORMA:VALOR separado por virgula. Ex: CARTAO:50,DINHEIRO:25",
+          `${payment.payment_method}:${Number(payment.amount).toFixed(2)}`
+        )
+      );
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : "Composicao de pagamento invalida.", type: "error" });
+      return;
+    }
+    if (splits === null) return;
     setPayingId(payment.id);
     try {
       await apiFetch<Payment>(`/payments/${payment.id}/pay`, {
         method: "PATCH",
         // Preserva a forma de pagamento real do lançamento em vez de forçar PIX.
-        body: JSON.stringify({ paid_at: today, payment_method: payment.payment_method })
+        body: JSON.stringify({
+          paid_at: today,
+          payment_method: splits[0]?.payment_method ?? payment.payment_method,
+          splits: splits.map((split) => ({ payment_method: split.payment_method, amount: Number(split.amount) }))
+        })
       });
       setMessage({ text: "Pagamento confirmado.", type: "success" });
       await load();
@@ -124,6 +171,27 @@ export default function PaymentsPage() {
     } finally {
       setPayingId(null);
     }
+  }
+
+  function updateSplit(index: number, patch: Partial<PaymentSplitForm>) {
+    setForm((current) => ({
+      ...current,
+      splits: current.splits.map((split, splitIndex) => splitIndex === index ? { ...split, ...patch } : split)
+    }));
+  }
+
+  function addSplit() {
+    setForm((current) => ({
+      ...current,
+      splits: [...current.splits, { payment_method: "DINHEIRO", amount: "" }]
+    }));
+  }
+
+  function removeSplit(index: number) {
+    setForm((current) => ({
+      ...current,
+      splits: current.splits.length === 1 ? current.splits : current.splits.filter((_, splitIndex) => splitIndex !== index)
+    }));
   }
 
   async function generateMonthly() {
@@ -195,7 +263,20 @@ export default function PaymentsPage() {
           </div>
           <div>
             <label className="label" htmlFor="payment-amount">Valor (R$)</label>
-            <input id="payment-amount" className="field" required type="number" step="0.01" min="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+            <input
+              id="payment-amount"
+              className="field"
+              required
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={form.amount}
+              onChange={(e) => setForm({
+                ...form,
+                amount: e.target.value,
+                splits: form.splits.length === 1 ? [{ ...form.splits[0], amount: e.target.value }] : form.splits
+              })}
+            />
           </div>
           <div>
             <label className="label" htmlFor="payment-due-date">Vencimento</label>
@@ -207,13 +288,24 @@ export default function PaymentsPage() {
           </div>
           <div>
             <label className="label" htmlFor="payment-status">Status</label>
-            <select id="payment-status" className="field" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as PaymentStatus })}>
+            <select
+              id="payment-status"
+              className="field"
+              value={form.status}
+              onChange={(e) => setForm({
+                ...form,
+                status: e.target.value as PaymentStatus,
+                splits: e.target.value === "PAGO" && form.splits.length === 1
+                  ? [{ ...form.splits[0], amount: form.splits[0].amount || form.amount }]
+                  : form.splits
+              })}
+            >
               {paymentStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </div>
           <div>
             <label className="label" htmlFor="payment-method">Forma de pagamento</label>
-            <select id="payment-method" className="field" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value as PaymentMethod })}>
+            <select id="payment-method" className="field" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value as PaymentMethod, splits: [{ payment_method: e.target.value as PaymentMethod, amount: form.amount }] })}>
               {paymentMethods.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </div>
@@ -228,6 +320,45 @@ export default function PaymentsPage() {
             </button>
           </div>
         </div>
+        {form.status === "PAGO" ? (
+          <div className="mt-4 rounded-lg border border-line p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-ink">Composicao do pagamento</h3>
+              <button className="btn-secondary px-3" type="button" onClick={addSplit}>
+                <Plus className="h-4 w-4" aria-hidden />
+                Forma
+              </button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {form.splits.map((split, index) => (
+                <div key={index} className="grid gap-3 sm:grid-cols-[1fr_140px_auto]">
+                  <select
+                    className="field"
+                    aria-label="Forma de pagamento"
+                    value={split.payment_method}
+                    onChange={(event) => updateSplit(index, { payment_method: event.target.value as PaymentMethod })}
+                  >
+                    {paymentMethods.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                  <input
+                    className="field"
+                    aria-label="Valor da forma de pagamento"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={split.amount}
+                    onChange={(event) => updateSplit(index, { amount: event.target.value })}
+                    placeholder="Valor"
+                    required
+                  />
+                  <button className="btn-secondary px-3" type="button" onClick={() => removeSplit(index)} disabled={form.splits.length === 1}>
+                    Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </form>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
@@ -281,20 +412,21 @@ export default function PaymentsPage() {
                       <MobileRecordRow label="Valor" value={formatMoney(payment.amount)} />
                       <MobileRecordRow label="Vencimento" value={formatDate(payment.due_date)} />
                       <MobileRecordRow label="Pagamento" value={formatDate(payment.paid_at)} />
-                      <MobileRecordRow label="Forma" value={payment.payment_method} />
+                      <MobileRecordRow label="Forma" value={paymentSplitLabel(payment)} />
                     </MobileRecord>
                   );
                 })}
               </div>
 
               <div className="desktop-table-wrap">
-                <table className="table-base min-w-[780px]">
+                <table className="table-base min-w-[880px]">
                   <thead>
                     <tr>
                       <th>Aluno</th>
                       <th>Vencimento</th>
                       <th>Pagamento</th>
                       <th>Valor</th>
+                      <th>Forma</th>
                       <th>Status</th>
                       <th>Acoes</th>
                     </tr>
@@ -306,6 +438,7 @@ export default function PaymentsPage() {
                         <td>{formatDate(payment.due_date)}</td>
                         <td>{formatDate(payment.paid_at)}</td>
                         <td>{formatMoney(payment.amount)}</td>
+                        <td className="max-w-[220px] text-xs text-ink/65">{paymentSplitLabel(payment)}</td>
                         <td><StatusBadge value={payment.status} /></td>
                         <td>
                           {payment.status !== "PAGO" && payment.status !== "CANCELADO" ? (

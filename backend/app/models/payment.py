@@ -40,3 +40,24 @@ class Payment(Base):
 
     student = relationship("Student", back_populates="payments")
     created_by = relationship("User", back_populates="payments")
+    splits = relationship(
+        "PaymentSplit",
+        back_populates="payment",
+        cascade="all, delete-orphan",
+        order_by="PaymentSplit.id",
+    )
+
+
+class PaymentSplit(Base):
+    __tablename__ = "payment_splits"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id", ondelete="CASCADE"), index=True)
+    payment_method: Mapped[PaymentMethod] = mapped_column(
+        Enum(PaymentMethod, name="payment_method", native_enum=False),
+        nullable=False,
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    payment = relationship("Payment", back_populates="splits")

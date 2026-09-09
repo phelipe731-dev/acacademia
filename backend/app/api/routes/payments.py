@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_roles
 from app.db.session import get_db
-from app.models.enums import PaymentStatus, UserRole
-from app.models.payment import Payment
+from app.models.enums import PaymentMethod, PaymentStatus, UserRole
+from app.models.payment import Payment, PaymentSplit
 from app.models.student import Student
 from app.models.user import User
-from app.schemas.payment import PaymentCancel, PaymentCreate, PaymentRead, PaymentUpdate, PaymentWithStudent
+from app.schemas.payment import PaymentCancel, PaymentCreate, PaymentRead, PaymentSplitCreate, PaymentUpdate, PaymentWithStudent
 from app.schemas.generation import MonthlyPaymentsGenerateRequest, MonthlyPaymentsGenerateResult
 from app.schemas.report import DefaulterReportRow
 from app.services.audit import model_snapshot, record_audit
@@ -25,6 +25,35 @@ from app.services.payments import (
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
+def sync_payment_splits(payment: Payment, splits: list[PaymentSplitCreate] | None) -> None:
+    if payment.status != PaymentStatus.PAGO:
+        payment.splits.clear()
+        return
+
+    split_payloads = splits
+    if split_payloads is None:
+        if payment.splits:
+            split_payloads = [
+                PaymentSplitCreate(payment_method=split.payment_method, amount=split.amount) for split in payment.splits
+            ]
+        else:
+            split_payloads = [PaymentSplitCreate(payment_method=payment.payment_method, amount=payment.amount)]
+
+    total = sum((split.amount for split in split_payloads), Decimal("0.00")).quantize(Decimal("0.01"))
+    amount = payment.amount.quantize(Decimal("0.01"))
+    if total != amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A soma das formas de pagamento precisa ser igual ao valor da mensalidade.",
+        )
+
+    payment.payment_method = split_payloads[0].payment_method if len(split_payloads) == 1 else PaymentMethod.OUTRO
+    payment.splits[:] = [
+        PaymentSplit(payment_method=split.payment_method, amount=split.amount)
+        for split in split_payloads
+    ]
+
+
 @router.get("", response_model=list[PaymentWithStudent])
 def list_payments(
     status_filter: PaymentStatus | None = Query(default=None, alias="status"),
@@ -36,7 +65,11 @@ def list_payments(
     db: Session = Depends(get_db),
 ) -> list[Payment]:
     refresh_all_student_statuses(db)
-    stmt = select(Payment).options(selectinload(Payment.student), selectinload(Payment.created_by)).order_by(Payment.due_date.desc())
+    stmt = (
+        select(Payment)
+        .options(selectinload(Payment.student), selectinload(Payment.created_by), selectinload(Payment.splits))
+        .order_by(Payment.due_date.desc())
+    )
     if status_filter:
         stmt = stmt.where(Payment.status == status_filter)
     elif not include_canceled:
@@ -81,6 +114,7 @@ def create_payment(
         if existing_open.created_by_id is None:
             existing_open.created_by_id = current_user.id
         normalize_payment_status(existing_open)
+        sync_payment_splits(existing_open, payload.splits)
         db.flush()
         update_student_status_from_payments(db, student.id)
         db.flush()
@@ -111,9 +145,11 @@ def create_payment(
             detail="Ja existe mensalidade para este aluno neste vencimento. Use a baixa do lancamento existente.",
         )
 
-    payment = Payment(**payload.model_dump(), created_by_id=current_user.id)
+    data = payload.model_dump(exclude={"splits"})
+    payment = Payment(**data, created_by_id=current_user.id)
     normalize_payment_status(payment)
     db.add(payment)
+    sync_payment_splits(payment, payload.splits)
     db.flush()
     record_audit(
         db,
@@ -141,11 +177,13 @@ def update_payment(
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mensalidade nao encontrada.")
     before = model_snapshot(payment)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True, exclude={"splits"})
+    for field, value in updates.items():
         setattr(payment, field, value)
     if payment.created_by_id is None:
         payment.created_by_id = current_user.id
     normalize_payment_status(payment)
+    sync_payment_splits(payment, payload.splits if "splits" in payload.model_fields_set else None)
     # flush antes de recalcular: com autoflush=False, a contagem de parcelas atrasadas
     # precisa enxergar o novo status ja persistido, senao o aluno fica com status obsoleto.
     db.flush()
@@ -186,6 +224,7 @@ def mark_payment_paid(
     if payment.created_by_id is None:
         payment.created_by_id = current_user.id
     normalize_payment_status(payment)
+    sync_payment_splits(payment, payload.splits if "splits" in payload.model_fields_set else None)
     # flush antes de recalcular o status do aluno (ver update_payment).
     db.flush()
     update_student_status_from_payments(db, payment.student_id)
@@ -259,7 +298,7 @@ def upcoming_payments(
         db.scalars(
             select(Payment)
             .where(Payment.status == PaymentStatus.PENDENTE, Payment.due_date >= today, Payment.due_date <= limit)
-            .options(selectinload(Payment.student), selectinload(Payment.created_by))
+            .options(selectinload(Payment.student), selectinload(Payment.created_by), selectinload(Payment.splits))
             .order_by(Payment.due_date)
         ).all()
     )

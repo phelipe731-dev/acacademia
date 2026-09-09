@@ -23,8 +23,27 @@ class PaymentBase(BaseModel):
         return value.quantize(Decimal("0.01"))
 
 
+class PaymentSplitCreate(BaseModel):
+    payment_method: PaymentMethod
+    amount: Decimal = Field(gt=0)
+
+    @field_validator("amount")
+    @classmethod
+    def money_scale(cls, value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"))
+
+
+class PaymentSplitRead(PaymentSplitCreate):
+    id: int
+    payment_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PaymentCreate(PaymentBase):
     amount: Decimal = Field(gt=0)
+    splits: list[PaymentSplitCreate] | None = None
 
 
 class PaymentUpdate(BaseModel):
@@ -34,6 +53,7 @@ class PaymentUpdate(BaseModel):
     status: PaymentStatus | None = None
     payment_method: PaymentMethod | None = None
     notes: str | None = None
+    splits: list[PaymentSplitCreate] | None = None
 
 
 class PaymentCancel(BaseModel):
@@ -45,6 +65,7 @@ class PaymentRead(PaymentBase):
     created_by_id: int | None
     created_at: datetime
     updated_at: datetime
+    splits: list[PaymentSplitRead] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 

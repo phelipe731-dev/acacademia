@@ -90,6 +90,15 @@ export interface Payment {
   created_at: string;
   updated_at: string;
   student?: Student;
+  splits?: PaymentSplit[];
+}
+
+export interface PaymentSplit {
+  id: number;
+  payment_id: number;
+  payment_method: PaymentMethod;
+  amount: string;
+  created_at: string;
 }
 
 export interface Product {

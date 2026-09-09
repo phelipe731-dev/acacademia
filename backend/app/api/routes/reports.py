@@ -7,7 +7,7 @@ from io import StringIO
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy import desc, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_roles
 from app.core.tz import business_today, day_after_utc, day_start_utc
@@ -49,6 +49,15 @@ def sanitize_csv_value(value: object) -> object:
     return value
 
 
+def payment_method_label(payment: Payment) -> str:
+    if not payment.splits:
+        return payment.payment_method.value if hasattr(payment.payment_method, "value") else str(payment.payment_method)
+    return " + ".join(
+        f"{split.payment_method.value if hasattr(split.payment_method, 'value') else str(split.payment_method)} {split.amount}"
+        for split in payment.splits
+    )
+
+
 def csv_response(filename: str, rows: list[dict[str, object]]) -> Response:
     output = StringIO()
     if rows:
@@ -73,21 +82,22 @@ def payments_received_report(
 ) -> list[PaymentReportRow]:
     start, end = default_dates(start_date, end_date)
     rows = db.execute(
-        select(Payment.id, Student.name, Payment.amount, Payment.paid_at, Payment.due_date, Payment.payment_method)
+        select(Payment, Student.name)
         .join(Student, Student.id == Payment.student_id)
+        .options(selectinload(Payment.splits))
         .where(Payment.status == PaymentStatus.PAGO, Payment.paid_at >= start, Payment.paid_at <= end)
         .order_by(Payment.paid_at.desc())
     ).all()
     return [
         PaymentReportRow(
-            id=row[0],
-            student_name=row[1],
-            amount=row[2],
-            paid_at=row[3],
-            due_date=row[4],
-            payment_method=row[5].value if hasattr(row[5], "value") else str(row[5]),
+            id=payment.id,
+            student_name=student_name,
+            amount=payment.amount,
+            paid_at=payment.paid_at,
+            due_date=payment.due_date,
+            payment_method=payment_method_label(payment),
         )
-        for row in rows
+        for payment, student_name in rows
     ]
 
 

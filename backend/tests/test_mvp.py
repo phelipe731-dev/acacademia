@@ -95,6 +95,69 @@ def test_register_payment_and_student_history(client: TestClient) -> None:
     assert len(history.json()) == 1
 
 
+def test_paid_payment_accepts_split_methods_and_validates_total(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+
+    response = client.post(
+        "/payments",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "amount": 75,
+            "due_date": str(date.today()),
+            "paid_at": str(date.today()),
+            "status": "PAGO",
+            "payment_method": "PIX",
+            "splits": [
+                {"payment_method": "CARTAO", "amount": 50},
+                {"payment_method": "DINHEIRO", "amount": 25},
+            ],
+            "notes": "Mensalidade dividida",
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "PAGO"
+    assert body["payment_method"] == "OUTRO"
+    assert body["splits"] == [
+        {
+            "id": body["splits"][0]["id"],
+            "payment_id": body["id"],
+            "payment_method": "CARTAO",
+            "amount": "50.00",
+            "created_at": body["splits"][0]["created_at"],
+        },
+        {
+            "id": body["splits"][1]["id"],
+            "payment_id": body["id"],
+            "payment_method": "DINHEIRO",
+            "amount": "25.00",
+            "created_at": body["splits"][1]["created_at"],
+        },
+    ]
+
+    invalid = client.post(
+        "/payments",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "amount": 75,
+            "due_date": str(date.today() + timedelta(days=1)),
+            "paid_at": str(date.today()),
+            "status": "PAGO",
+            "payment_method": "PIX",
+            "splits": [
+                {"payment_method": "CARTAO", "amount": 50},
+                {"payment_method": "DINHEIRO", "amount": 20},
+            ],
+            "notes": None,
+        },
+    )
+    assert invalid.status_code == 400
+    assert "soma" in invalid.json()["detail"]
+
+
 def test_manual_paid_registration_settles_existing_open_payment(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     student = create_student(client, headers)
