@@ -1,9 +1,10 @@
 from datetime import date, timedelta
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
 from app.models.enums import PaymentMethod, PaymentStatus
-from app.models.payment import Payment
+from app.models.payment import Payment, PaymentSplit
 from tests.conftest import TestingSessionLocal, create_admin_and_headers, create_product, create_student
 
 
@@ -156,6 +157,62 @@ def test_paid_payment_accepts_split_methods_and_validates_total(client: TestClie
     )
     assert invalid.status_code == 400
     assert "soma" in invalid.json()["detail"]
+
+
+def test_list_payments_serializes_zero_amount_split(client: TestClient) -> None:
+    # Regressao: a migracao de splits copiou o valor de mensalidades PAGO,
+    # inclusive as com amount=0.00 (canceladas por duplicidade). O split
+    # zerado nao pode quebrar a serializacao de GET /payments com 500.
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+
+    with TestingSessionLocal() as db:
+        payment = Payment(
+            student_id=student["id"],
+            amount=Decimal("0.00"),
+            due_date=date.today(),
+            paid_at=date.today(),
+            status=PaymentStatus.PAGO,
+            payment_method=PaymentMethod.PIX,
+        )
+        db.add(payment)
+        db.flush()
+        db.add(PaymentSplit(payment_id=payment.id, payment_method=PaymentMethod.PIX, amount=Decimal("0.00")))
+        db.commit()
+
+    response = client.get("/payments", headers=headers)
+    assert response.status_code == 200, response.text
+    zeroed = next(p for p in response.json() if p["amount"] == "0.00")
+    assert zeroed["splits"][0]["amount"] == "0.00"
+
+
+def test_mark_zero_amount_payment_paid_without_splits(client: TestClient) -> None:
+    # Regressao: quitar uma mensalidade legada de valor 0.00 sem informar splits
+    # nao pode explodir ao reconstruir a composicao (PaymentSplitCreate exige > 0).
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+
+    with TestingSessionLocal() as db:
+        payment = Payment(
+            student_id=student["id"],
+            amount=Decimal("0.00"),
+            due_date=date.today(),
+            status=PaymentStatus.PENDENTE,
+            payment_method=PaymentMethod.PIX,
+        )
+        db.add(payment)
+        db.commit()
+        payment_id = payment.id
+
+    response = client.patch(
+        f"/payments/{payment_id}/pay",
+        headers=headers,
+        json={"paid_at": str(date.today())},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "PAGO"
+    assert body["splits"][0]["amount"] == "0.00"
 
 
 def test_manual_paid_registration_settles_existing_open_payment(client: TestClient) -> None:

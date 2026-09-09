@@ -23,9 +23,9 @@ class PaymentBase(BaseModel):
         return value.quantize(Decimal("0.01"))
 
 
-class PaymentSplitCreate(BaseModel):
+class PaymentSplitBase(BaseModel):
     payment_method: PaymentMethod
-    amount: Decimal = Field(gt=0)
+    amount: Decimal
 
     @field_validator("amount")
     @classmethod
@@ -33,7 +33,11 @@ class PaymentSplitCreate(BaseModel):
         return value.quantize(Decimal("0.01"))
 
 
-class PaymentSplitRead(PaymentSplitCreate):
+class PaymentSplitCreate(PaymentSplitBase):
+    amount: Decimal = Field(gt=0)
+
+
+class PaymentSplitRead(PaymentSplitBase):
     id: int
     payment_id: int
     created_at: datetime

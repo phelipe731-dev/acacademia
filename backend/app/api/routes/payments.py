@@ -30,16 +30,17 @@ def sync_payment_splits(payment: Payment, splits: list[PaymentSplitCreate] | Non
         payment.splits.clear()
         return
 
-    split_payloads = splits
-    if split_payloads is None:
-        if payment.splits:
-            split_payloads = [
-                PaymentSplitCreate(payment_method=split.payment_method, amount=split.amount) for split in payment.splits
-            ]
-        else:
-            split_payloads = [PaymentSplitCreate(payment_method=payment.payment_method, amount=payment.amount)]
+    # Reconstruimos a composicao a partir de (forma, valor). Nao usamos PaymentSplitCreate
+    # aqui porque ele valida amount > 0 na entrada; mensalidades legadas com valor 0.00
+    # (ex.: alunos com mensalidade zero) precisam continuar sendo quitadas sem erro 500.
+    if splits is not None:
+        split_pairs = [(split.payment_method, split.amount) for split in splits]
+    elif payment.splits:
+        split_pairs = [(split.payment_method, split.amount) for split in payment.splits]
+    else:
+        split_pairs = [(payment.payment_method, payment.amount)]
 
-    total = sum((split.amount for split in split_payloads), Decimal("0.00")).quantize(Decimal("0.01"))
+    total = sum((amount for _, amount in split_pairs), Decimal("0.00")).quantize(Decimal("0.01"))
     amount = payment.amount.quantize(Decimal("0.01"))
     if total != amount:
         raise HTTPException(
@@ -47,10 +48,10 @@ def sync_payment_splits(payment: Payment, splits: list[PaymentSplitCreate] | Non
             detail="A soma das formas de pagamento precisa ser igual ao valor da mensalidade.",
         )
 
-    payment.payment_method = split_payloads[0].payment_method if len(split_payloads) == 1 else PaymentMethod.OUTRO
+    payment.payment_method = split_pairs[0][0] if len(split_pairs) == 1 else PaymentMethod.OUTRO
     payment.splits[:] = [
-        PaymentSplit(payment_method=split.payment_method, amount=split.amount)
-        for split in split_payloads
+        PaymentSplit(payment_method=method, amount=amount_value)
+        for method, amount_value in split_pairs
     ]
 
 
