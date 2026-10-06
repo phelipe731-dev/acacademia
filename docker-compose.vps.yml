@@ -1,0 +1,115 @@
+name: ac-academia
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    mem_limit: ${DB_MEMORY_LIMIT:-128m}
+    memswap_limit: ${DB_MEMORY_LIMIT:-128m}
+    cpus: 0.5
+    environment:
+      POSTGRES_DB: ac_academia
+      POSTGRES_USER: ac_academia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD em .env.vps}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command:
+      - postgres
+      - -c
+      - shared_buffers=16MB
+      - -c
+      - work_mem=1MB
+      - -c
+      - maintenance_work_mem=16MB
+      - -c
+      - max_connections=30
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - database
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ac_academia -d ac_academia"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    mem_limit: ${API_MEMORY_LIMIT:-192m}
+    memswap_limit: ${API_MEMORY_LIMIT:-192m}
+    cpus: 0.5
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://ac_academia:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}@db:5432/ac_academia
+      SECRET_KEY: ${SECRET_KEY:?Defina SECRET_KEY em .env.vps}
+      AUTO_CREATE_ADMIN: "false"
+      AUTH_COOKIE_SECURE: "true"
+      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-https://acacademia.netlify.app}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-https://acacademia.netlify.app}
+      UPLOAD_DIR: /app/uploads
+    command:
+      - sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+        --workers 1 --proxy-headers --forwarded-allow-ips '*'
+        --root-path '${API_ROOT_PATH:-/academia-api}'
+    ports:
+      - "127.0.0.1:${API_BIND_PORT:-8020}:8000"
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - database
+      - outbound
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  backup:
+    image: postgres:18-alpine
+    profiles: [tools]
+    mem_limit: 96m
+    memswap_limit: 96m
+    cpus: 0.25
+    environment:
+      PGHOST: db
+      PGUSER: ac_academia
+      PGDATABASE: ac_academia
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: "15"
+    volumes:
+      - ./backups:/backups
+      - ./infra/backup-vps.sh:/backup.sh:ro
+    networks:
+      - database
+    entrypoint: [sh, /backup.sh]
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  database:
+    internal: true
+  outbound:
+
+volumes:
+  postgres_data:
+  uploads_data:

@@ -1,4 +1,6 @@
 .env
+.env.vps
+.env.migration
 .venv/
 __pycache__/
 .pytest_cache/
