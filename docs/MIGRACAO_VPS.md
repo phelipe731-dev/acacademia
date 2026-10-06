@@ -8,8 +8,8 @@
 - Banco Render: PostgreSQL 18, Basic-256mb, disponivel, aproximadamente 106 MB.
 - gestaocontrole.duckdns.org aponta para esta VPS e possui configuracao HTTPS.
 - O frontend permanece no Netlify. Nao alterar sua API antes da validacao final.
-- Configuracao preparada para avaliacao. Isto NAO comprova capacidade suficiente
-  nem significa que a migracao foi realizada.
+- A migracao permanente foi ativada na VPS; o ensaio e os checks abaixo servem
+  como evidencia operacional, sem substituir o acompanhamento do uso diario.
 
 ## Resultado do ensaio em 06/10/2026
 
@@ -31,6 +31,9 @@
 - O Render foi mantido ativo durante a validacao. Nao suspender ou excluir o
   banco ate confirmar o uso diario, a restauracao do backup e a ausencia de
   referencias de midia faltantes.
+- Backup manual da VPS criado em 06/10/2026 e restaurado em banco temporario,
+  sem alterar a producao. A restauracao recompos 457 alunos, 646 mensalidades,
+  16 produtos, 27 vendas e a revisao Alembic `202609080001`.
 
 ## Configuracao isolada
 
@@ -102,9 +105,9 @@ O backup termina com erro se a exportacao falhar. Agendar diariamente depois de
 validar uma restauracao; manter uma copia externa e incluir o volume de uploads.
 O script nao remove backups automaticamente. Definir retencao e monitorar disco.
 
-Na VPS, instalar `infra/acacademia-backup.cron` em `/etc/cron.d/` depois de
-confirmar a permissao do arquivo. O primeiro backup manual ja foi executado com
-sucesso; a rotina deve ser acompanhada em `/var/log/acacademia-backup.log`.
+Na VPS, `infra/acacademia-backup.cron` ja foi instalado em `/etc/cron.d/`. O
+backup manual e a restauracao de teste foram executados com sucesso; acompanhar
+a rotina em `/var/log/acacademia-backup.log`.
 
 Manter o Render durante a validacao. Se houver gravacoes na VPS, voltar para o
 Render exige sincronizar os dados novos antes da troca; apenas trocar a URL pode
