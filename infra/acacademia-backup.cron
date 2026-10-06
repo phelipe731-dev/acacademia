@@ -1,0 +1,2 @@
+# Backup diario do banco AC Academia na VPS.
+15 3 * * * root cd /home/ubuntu/ac-academia && /usr/bin/docker compose -p ac-academia --env-file .env.vps -f docker-compose.vps.yml run --rm backup >> /var/log/acacademia-backup.log 2>&1

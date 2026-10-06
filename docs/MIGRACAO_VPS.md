@@ -25,8 +25,12 @@
 - As 3 referencias de imagem local das fichas retornaram 404 no Render. O dump
   do PostgreSQL nao carrega arquivos; os uploads precisam ser recuperados de uma
   copia da hospedagem ou substituidos antes da troca definitiva.
-- A instancia de ensaio foi encerrada depois dos testes. A producao continua no
-  Render/Netlify.
+- A instancia permanente foi ativada na VPS em `/home/ubuntu/ac-academia`, com a
+  API em `https://gestaocontrole.duckdns.org/academia-api`. O frontend continua
+  no Netlify e o Netlify foi publicado com essa nova URL.
+- O Render foi mantido ativo durante a validacao. Nao suspender ou excluir o
+  banco ate confirmar o uso diario, a restauracao do backup e a ausencia de
+  referencias de midia faltantes.
 
 ## Configuracao isolada
 
@@ -97,6 +101,10 @@ docker compose --env-file .env.vps -f docker-compose.vps.yml run --rm backup
 O backup termina com erro se a exportacao falhar. Agendar diariamente depois de
 validar uma restauracao; manter uma copia externa e incluir o volume de uploads.
 O script nao remove backups automaticamente. Definir retencao e monitorar disco.
+
+Na VPS, instalar `infra/acacademia-backup.cron` em `/etc/cron.d/` depois de
+confirmar a permissao do arquivo. O primeiro backup manual ja foi executado com
+sucesso; a rotina deve ser acompanhada em `/var/log/acacademia-backup.log`.
 
 Manter o Render durante a validacao. Se houver gravacoes na VPS, voltar para o
 Render exige sincronizar os dados novos antes da troca; apenas trocar a URL pode
