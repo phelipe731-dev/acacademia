@@ -45,6 +45,28 @@ class PaymentSplitRead(PaymentSplitBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class FinancialReceiptCreate(BaseModel):
+    amount: Decimal = Field(gt=0)
+    paid_at: date | None = None
+    payment_method: PaymentMethod = PaymentMethod.PIX
+    notes: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def receipt_money_scale(cls, value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"))
+
+
+class FinancialReceiptRead(FinancialReceiptCreate):
+    id: int
+    payment_id: int | None = None
+    sale_installment_id: int | None = None
+    created_by_id: int | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PaymentCreate(PaymentBase):
     amount: Decimal = Field(gt=0)
     splits: list[PaymentSplitCreate] | None = None
@@ -70,6 +92,9 @@ class PaymentRead(PaymentBase):
     created_at: datetime
     updated_at: datetime
     splits: list[PaymentSplitRead] = Field(default_factory=list)
+    receipts: list[FinancialReceiptRead] = Field(default_factory=list)
+    total_paid: Decimal = Decimal("0.00")
+    balance_due: Decimal = Decimal("0.00")
 
     model_config = ConfigDict(from_attributes=True)
 

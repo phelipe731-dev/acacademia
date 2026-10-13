@@ -15,6 +15,14 @@ from app.services.sales import refresh_overdue_sale_installments
 
 def normalize_payment_status(payment: Payment, today: date | None = None) -> None:
     current_day = today or date.today()
+    if payment.status not in (PaymentStatus.CANCELADO,) and payment.total_paid >= payment.amount and payment.amount > 0:
+        payment.status = PaymentStatus.PAGO
+        if payment.paid_at is None and payment.receipts:
+            payment.paid_at = max(receipt.paid_at for receipt in payment.receipts)
+        return
+    if payment.status not in (PaymentStatus.CANCELADO,) and payment.total_paid > 0:
+        payment.status = PaymentStatus.PARCIAL
+        return
     if payment.status == PaymentStatus.PAGO:
         if payment.paid_at is None:
             payment.paid_at = current_day
@@ -28,7 +36,7 @@ def refresh_overdue_payments(db: Session, today: date | None = None) -> None:
     current_day = today or date.today()
     db.execute(
         update(Payment)
-        .where(Payment.status == PaymentStatus.PENDENTE, Payment.due_date < current_day)
+        .where(Payment.status.in_([PaymentStatus.PENDENTE, PaymentStatus.PARCIAL]), Payment.due_date < current_day)
         .values(status=PaymentStatus.ATRASADO)
     )
 

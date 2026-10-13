@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.enums import PaymentMethod, SaleInstallmentStatus, SalePaymentMethod, SaleStatus
 from app.schemas.product import ProductRead
+from app.schemas.payment import FinancialReceiptRead
 from app.schemas.student import StudentRead
 from app.schemas.user import UserRead
 
@@ -67,6 +68,9 @@ class SaleInstallmentRead(BaseModel):
     notes: str | None = None
     created_at: datetime
     updated_at: datetime
+    receipts: list[FinancialReceiptRead] = []
+    total_paid: Decimal = Decimal("0.00")
+    balance_due: Decimal = Decimal("0.00")
 
     model_config = ConfigDict(from_attributes=True)
 

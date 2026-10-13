@@ -46,7 +46,7 @@ import { apiFetch, formatDate, formatDateTime, formatMoney, getSession } from "@
 import type { CheckIn, Payment, PaymentMethod, PaymentStatus, Sale, SaleInstallmentStatus, Student, StudentStatus, TrainingPlan, UserRole } from "@/lib/types";
 
 type DetailTab = "overview" | "financial" | "workouts" | "attendance" | "registration";
-type PaymentPreviewFilter = "TODAS" | "PAGO" | "PENDENTE" | "ATRASADO";
+type PaymentPreviewFilter = "TODAS" | "PAGO" | "PENDENTE" | "PARCIAL" | "ATRASADO";
 type FinancialTypeFilter = "TODOS" | "MENSALIDADE" | "VENDA" | "PRAZO";
 type FinancialStatusFilter = "TODOS" | PaymentStatus | SaleInstallmentStatus | "PRAZO";
 type AttendancePeriod = "MONTH" | "30_DAYS" | "ALL";
@@ -71,6 +71,7 @@ interface FinancialRow {
   type: "MENSALIDADE" | "VENDA" | "PRAZO";
   description: string;
   notes?: string | null;
+  balanceDue?: string | number;
   saleInstallmentId?: number;
   paymentId?: number;
   canPay?: boolean;
@@ -81,8 +82,7 @@ type SaleInstallmentEntry = {
   sale: Sale;
   installment: NonNullable<Sale["installments"]>[number];
 };
-type PaymentSplitForm = { payment_method: PaymentMethod; amount: string };
-type PaymentForm = { id: number; paid_at: string; payment_method: PaymentMethod; notes: string; splits?: PaymentSplitForm[] };
+type PaymentForm = { id: number; amount: string; paid_at: string; payment_method: PaymentMethod; notes: string };
 
 const tabs: Array<{ id: DetailTab; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visao geral", icon: LayoutGrid },
@@ -96,6 +96,7 @@ const paymentPreviewFilters: Array<{ value: PaymentPreviewFilter; label: string;
   { value: "TODAS", label: "Todas", className: "border-brand/25 bg-brand-soft text-brand" },
   { value: "PAGO", label: "Pagas", className: "border-success/25 bg-success-soft text-success-dark" },
   { value: "PENDENTE", label: "Pendentes", className: "border-warning/25 bg-warning-soft text-warning" },
+  { value: "PARCIAL", label: "Parciais", className: "border-warning/25 bg-warning-soft text-warning" },
   { value: "ATRASADO", label: "Vencidas", className: "border-danger/20 bg-danger-soft text-danger" }
 ];
 
@@ -428,10 +429,10 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     if (!row.paymentId) return;
     setMonthlyPaymentForm({
       id: row.paymentId,
+      amount: String(row.balanceDue ?? row.amount),
       paid_at: todayDateInput(),
       payment_method: isPaymentMethod(row.method) ? row.method : "PIX",
-      notes: row.notes || "",
-      splits: [{ payment_method: isPaymentMethod(row.method) ? row.method : "PIX", amount: String(row.amount) }]
+      notes: row.notes || ""
     });
   }
 
@@ -441,20 +442,17 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     setSavingMonthlyPayment(true);
     setMessage(null);
     try {
-      await apiFetch(`/payments/${monthlyPaymentForm.id}/pay`, {
-        method: "PATCH",
+      await apiFetch(`/payments/${monthlyPaymentForm.id}/receipts`, {
+        method: "POST",
         body: JSON.stringify({
+          amount: Number(monthlyPaymentForm.amount),
           paid_at: monthlyPaymentForm.paid_at || null,
           payment_method: monthlyPaymentForm.payment_method,
-          splits: monthlyPaymentForm.splits?.map((split) => ({
-            payment_method: split.payment_method,
-            amount: Number(split.amount),
-          })),
           notes: monthlyPaymentForm.notes || null
         })
       });
       setMonthlyPaymentForm(null);
-      setMessage({ text: "Mensalidade marcada como paga.", type: "success" });
+      setMessage({ text: "Recebimento da mensalidade registrado.", type: "success" });
       await load(role);
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao dar baixa na mensalidade."), type: "error" });
@@ -467,6 +465,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     if (!row.saleInstallmentId) return;
     setSaleInstallmentPaymentForm({
       id: row.saleInstallmentId,
+      amount: String(row.balanceDue ?? row.amount),
       paid_at: todayDateInput(),
       payment_method: isPaymentMethod(row.method) ? row.method : "PIX",
       notes: row.notes || ""
@@ -479,16 +478,17 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     setSavingSaleInstallmentPayment(true);
     setMessage(null);
     try {
-      await apiFetch(`/sales/installments/${saleInstallmentPaymentForm.id}/pay`, {
-        method: "PATCH",
+      await apiFetch(`/sales/installments/${saleInstallmentPaymentForm.id}/receipts`, {
+        method: "POST",
         body: JSON.stringify({
+          amount: Number(saleInstallmentPaymentForm.amount),
           paid_at: saleInstallmentPaymentForm.paid_at || null,
           payment_method: saleInstallmentPaymentForm.payment_method,
           notes: saleInstallmentPaymentForm.notes || null
         })
       });
       setSaleInstallmentPaymentForm(null);
-      setMessage({ text: "Fatura da venda marcada como paga.", type: "success" });
+      setMessage({ text: "Recebimento da fatura registrado.", type: "success" });
       await load(role);
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao registrar pagamento da fatura."), type: "error" });
@@ -519,7 +519,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
 
   const paidPayments = useMemo(() => payments.filter((payment) => payment.status === "PAGO"), [payments]);
   const openPayments = useMemo(
-    () => payments.filter((payment) => payment.status === "PENDENTE" || payment.status === "ATRASADO"),
+    () => payments.filter((payment) => payment.status === "PENDENTE" || payment.status === "PARCIAL" || payment.status === "ATRASADO"),
     [payments]
   );
   const overduePayments = useMemo(() => payments.filter((payment) => payment.status === "ATRASADO"), [payments]);
@@ -530,15 +530,15 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     [activeSales]
   );
   const openSaleInstallments = useMemo(
-    () => saleInstallments.filter(({ installment }) => installment.status === "ABERTA" || installment.status === "ATRASADA"),
+    () => saleInstallments.filter(({ installment }) => installment.status === "ABERTA" || installment.status === "PARCIAL" || installment.status === "ATRASADA"),
     [saleInstallments]
   );
   const overdueSaleInstallments = useMemo(
     () => saleInstallments.filter(({ installment }) => installment.status === "ATRASADA"),
     [saleInstallments]
   );
-  const openPaymentsTotal = useMemo(() => sumMoney(openPayments, (payment) => payment.amount), [openPayments]);
-  const openSaleInstallmentsTotal = useMemo(() => sumMoney(openSaleInstallments, ({ installment }) => installment.amount), [openSaleInstallments]);
+  const openPaymentsTotal = useMemo(() => sumMoney(openPayments, (payment) => payment.balance_due ?? payment.amount), [openPayments]);
+  const openSaleInstallmentsTotal = useMemo(() => sumMoney(openSaleInstallments, ({ installment }) => installment.balance_due ?? installment.amount), [openSaleInstallments]);
   const openFinancialTotal = openPaymentsTotal + openSaleInstallmentsTotal;
   const salesTotal = useMemo(() => sumMoney(activeSales, (sale) => sale.total_amount), [activeSales]);
   const monthCheckins = useMemo(() => checkins.filter((checkin) => isWithinCurrentMonth(checkin.checked_in_at)), [checkins]);
@@ -555,7 +555,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
   const nextDueInfo = useMemo(() => {
     if (!student) return { date: null as Date | null, label: "-", helper: "-" };
     const pendingPayment = [...payments]
-      .filter((payment) => payment.status === "PENDENTE")
+      .filter((payment) => payment.status === "PENDENTE" || payment.status === "PARCIAL")
       .sort((a, b) => (parseDateOnly(a.due_date)?.getTime() ?? 0) - (parseDateOnly(b.due_date)?.getTime() ?? 0))[0];
     const dueDate = parseDateOnly(pendingPayment?.due_date) ?? nextDueDateFromDay(student.due_day);
     return {
@@ -591,7 +591,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       };
     }
     const pending = [...payments]
-      .filter((payment) => payment.status === "PENDENTE")
+      .filter((payment) => payment.status === "PENDENTE" || payment.status === "PARCIAL")
       .sort((a, b) => (parseDateOnly(a.due_date)?.getTime() ?? 0) - (parseDateOnly(b.due_date)?.getTime() ?? 0))[0];
     if (pending) {
       return {
@@ -685,14 +685,15 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       date: payment.due_date,
       dueDate: payment.due_date,
       paidAt: payment.paid_at,
-      amount: payment.amount,
+      amount: payment.status === "PAGO" ? payment.amount : (payment.balance_due ?? payment.amount),
       method: monthlyPaymentLabel(payment),
       status: payment.status,
       type: "MENSALIDADE",
       description: "Mensalidade",
       notes: payment.notes,
+      balanceDue: payment.balance_due ?? payment.amount,
       paymentId: payment.id,
-      canPay: payment.status === "PENDENTE" || payment.status === "ATRASADO",
+       canPay: payment.status === "PENDENTE" || payment.status === "PARCIAL" || payment.status === "ATRASADO",
       canCancel: payment.status !== "CANCELADO"
     }));
     sales.forEach((sale) => {
@@ -705,14 +706,15 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
             date: installment.paid_at || installment.due_date,
             dueDate: installment.due_date,
             paidAt: installment.paid_at,
-            amount: installment.amount,
+             amount: installment.status === "PAGA" ? installment.amount : (installment.balance_due ?? installment.amount),
             method,
             status: installment.status,
             type: "PRAZO",
             description: `Parcela ${installment.installment_number}/${sale.installments_count} - ${saleItemsLabel(sale) || `Venda #${sale.id}`}`,
             notes: installment.notes || sale.notes,
+             balanceDue: installment.balance_due ?? installment.amount,
             saleInstallmentId: installment.id,
-            canPay: saleStatus !== "CANCELADA" && (installment.status === "ABERTA" || installment.status === "ATRASADA")
+             canPay: saleStatus !== "CANCELADA" && (installment.status === "ABERTA" || installment.status === "PARCIAL" || installment.status === "ATRASADA")
           });
         });
         return;
@@ -1436,6 +1438,7 @@ function FinancialTab({
               <option value="PAGO">Pago</option>
               <option value="PAGA">Paga</option>
               <option value="PENDENTE">Pendente</option>
+               <option value="PARCIAL">Parcial</option>
               <option value="ABERTA">Aberta</option>
               <option value="ATRASADO">Vencido</option>
               <option value="ATRASADA">Vencida</option>
@@ -2144,25 +2147,6 @@ function SaleInstallmentPaymentModal({
   title: string;
 }) {
   const methods: PaymentMethod[] = ["PIX", "DINHEIRO", "CARTAO", "OUTRO"];
-  const updateSplit = (index: number, patch: Partial<PaymentSplitForm>) => {
-    setForm({
-      ...form,
-      splits: form.splits?.map((split, splitIndex) => splitIndex === index ? { ...split, ...patch } : split),
-    });
-  };
-  const addSplit = () => {
-    setForm({
-      ...form,
-      splits: [...(form.splits ?? []), { payment_method: "DINHEIRO", amount: "" }],
-    });
-  };
-  const removeSplit = (index: number) => {
-    if (!form.splits || form.splits.length <= 1) return;
-    setForm({
-      ...form,
-      splits: form.splits.filter((_, splitIndex) => splitIndex !== index),
-    });
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center" role="dialog" aria-modal="true">
@@ -2178,6 +2162,18 @@ function SaleInstallmentPaymentModal({
         </div>
 
         <div className="mt-5 grid gap-4">
+          <Field label="Valor recebido agora" id={`${idPrefix}-amount`}>
+            <input
+              id={`${idPrefix}-amount`}
+              className="field"
+              required
+              min="0.01"
+              step="0.01"
+              type="number"
+              value={form.amount}
+              onChange={(event) => setForm({ ...form, amount: event.target.value })}
+            />
+          </Field>
           <Field label="Data do pagamento" id={`${idPrefix}-paid-at`}>
             <input
               id={`${idPrefix}-paid-at`}
@@ -2195,8 +2191,7 @@ function SaleInstallmentPaymentModal({
               value={form.payment_method}
               onChange={(event) => setForm({
                 ...form,
-                payment_method: event.target.value as PaymentMethod,
-                splits: form.splits?.length === 1 ? [{ ...form.splits[0], payment_method: event.target.value as PaymentMethod }] : form.splits
+                 payment_method: event.target.value as PaymentMethod
               })}
             >
               {methods.map((method) => (
@@ -2204,46 +2199,6 @@ function SaleInstallmentPaymentModal({
               ))}
             </select>
           </Field>
-          {form.splits ? (
-            <div className="rounded-lg border border-line p-3">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-ink">Composicao</p>
-                <button className="btn-secondary px-3 py-2 text-xs" type="button" onClick={addSplit}>
-                  <Plus className="h-4 w-4" aria-hidden />
-                  Forma
-                </button>
-              </div>
-              <div className="space-y-2">
-                {form.splits.map((split, index) => (
-                  <div key={index} className="grid gap-2 sm:grid-cols-[1fr_120px_auto]">
-                    <select
-                      className="field"
-                      aria-label="Forma da composicao"
-                      value={split.payment_method}
-                      onChange={(event) => updateSplit(index, { payment_method: event.target.value as PaymentMethod })}
-                    >
-                      {methods.map((method) => (
-                        <option key={method} value={method}>{paymentMethodLabels[method] ?? method}</option>
-                      ))}
-                    </select>
-                    <input
-                      className="field"
-                      aria-label="Valor da composicao"
-                      required
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={split.amount}
-                      onChange={(event) => updateSplit(index, { amount: event.target.value })}
-                    />
-                    <button className="btn-secondary px-3 py-2 text-xs" type="button" disabled={(form.splits?.length ?? 0) <= 1} onClick={() => removeSplit(index)}>
-                      Remover
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
           <Field label="Observacao" id={`${idPrefix}-payment-notes`}>
             <input
               id={`${idPrefix}-payment-notes`}

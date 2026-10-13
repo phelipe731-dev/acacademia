@@ -18,7 +18,7 @@ import type {
 } from "@/lib/types";
 
 const paymentMethods: PaymentMethod[] = ["DINHEIRO", "PIX", "CARTAO", "OUTRO"];
-const paymentStatuses: PaymentStatus[] = ["PENDENTE", "PAGO", "ATRASADO", "CANCELADO"];
+const paymentStatuses: PaymentStatus[] = ["PENDENTE", "PARCIAL", "PAGO", "ATRASADO", "CANCELADO"];
 type PaymentSplitForm = { payment_method: PaymentMethod; amount: string };
 
 function paymentSplitLabel(payment: Payment) {
@@ -140,31 +140,32 @@ export default function PaymentsPage() {
 
   async function markPaid(payment: Payment) {
     if (payingId !== null) return;
-    let splits: PaymentSplitForm[] | null;
-    try {
-      splits = parseSplitPrompt(
-        window.prompt(
-          "Como foi pago? Use FORMA:VALOR separado por virgula. Ex: CARTAO:50,DINHEIRO:25",
-          `${payment.payment_method}:${Number(payment.amount).toFixed(2)}`
-        )
-      );
-    } catch (error) {
-      setMessage({ text: error instanceof Error ? error.message : "Composicao de pagamento invalida.", type: "error" });
+    const balance = Number(payment.balance_due ?? payment.amount);
+    const amountText = window.prompt("Valor recebido agora", balance.toFixed(2));
+    if (amountText === null) return;
+    const amount = Number(amountText.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0 || amount > balance) {
+      setMessage({ text: `Informe um valor entre R$ 0,01 e R$ ${balance.toFixed(2)}.`, type: "error" });
       return;
     }
-    if (splits === null) return;
+    const method = window.prompt("Forma de pagamento: PIX, DINHEIRO, CARTAO ou OUTRO", payment.payment_method);
+    if (method === null) return;
+    const normalizedMethod = method.toUpperCase() as PaymentMethod;
+    if (!paymentMethods.includes(normalizedMethod)) {
+      setMessage({ text: "Forma de pagamento invalida.", type: "error" });
+      return;
+    }
     setPayingId(payment.id);
     try {
-      await apiFetch<Payment>(`/payments/${payment.id}/pay`, {
-        method: "PATCH",
-        // Preserva a forma de pagamento real do lançamento em vez de forçar PIX.
+      await apiFetch<Payment>(`/payments/${payment.id}/receipts`, {
+        method: "POST",
         body: JSON.stringify({
           paid_at: today,
-          payment_method: splits[0]?.payment_method ?? payment.payment_method,
-          splits: splits.map((split) => ({ payment_method: split.payment_method, amount: Number(split.amount) }))
+          payment_method: normalizedMethod,
+          amount,
         })
       });
-      setMessage({ text: "Pagamento confirmado.", type: "success" });
+      setMessage({ text: amount < balance ? "Recebimento parcial registrado." : "Pagamento confirmado.", type: "success" });
       await load();
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao confirmar pagamento."), type: "error" });

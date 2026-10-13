@@ -13,6 +13,7 @@ from app.models.enums import (
 from app.models.audit import AuditLog
 from app.models.checkin import CheckIn
 from app.models.payment import Payment, PaymentSplit
+from app.models.receipt import FinancialReceipt
 from app.models.product import Product
 from app.models.sale import Sale, SaleInstallment, SaleItem
 from app.models.stock import StockMovement
@@ -28,6 +29,7 @@ from app.models.user import User
 __all__ = [
     "Payment",
     "PaymentSplit",
+    "FinancialReceipt",
     "AuditLog",
     "CheckIn",
     "PaymentMethod",

@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.core.tz import business_today
 from app.models.checkin import CheckIn
-from tests.conftest import TestingSessionLocal, create_admin_and_headers, create_student
+from tests.conftest import TestingSessionLocal, create_admin_and_headers, create_product, create_student
 
 
 def _student_payload(**overrides) -> dict:
@@ -36,6 +36,71 @@ def test_duplicate_cpf_is_blocked_with_message(client: TestClient) -> None:
     second = client.post("/students", headers=headers, json=_student_payload(name="Outra Ana", cpf="12345678900"))
     assert second.status_code == 400
     assert "CPF" in second.json()["detail"]
+
+
+def test_monthly_payment_accepts_partial_receipts(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+    created = client.post(
+        "/payments",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "amount": 150,
+            "due_date": str(date.today()),
+            "status": "PENDENTE",
+            "payment_method": "PIX",
+        },
+    )
+    assert created.status_code == 201, created.text
+    payment_id = created.json()["id"]
+
+    first = client.post(
+        f"/payments/{payment_id}/receipts",
+        headers=headers,
+        json={"amount": 60, "paid_at": str(date.today()), "payment_method": "PIX"},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "PARCIAL"
+    assert first.json()["total_paid"] == "60.00"
+    assert first.json()["balance_due"] == "90.00"
+
+    second = client.post(
+        f"/payments/{payment_id}/receipts",
+        headers=headers,
+        json={"amount": 90, "paid_at": str(date.today()), "payment_method": "DINHEIRO"},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["status"] == "PAGO"
+    assert len(second.json()["receipts"]) == 2
+
+
+def test_sale_installment_accepts_partial_receipts(client: TestClient) -> None:
+    headers = create_admin_and_headers(client)
+    student = create_student(client, headers)
+    product = create_product(client, headers, stock=2)
+    sale = client.post(
+        "/sales",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "payment_method": "PRAZO",
+            "installments_count": 1,
+            "installment_payment_method": "PIX",
+            "first_due_date": str(date.today()),
+            "items": [{"product_id": product["id"], "quantity": 1}],
+        },
+    )
+    assert sale.status_code == 201, sale.text
+    installment = sale.json()["installments"][0]
+    first = client.post(
+        f"/sales/installments/{installment['id']}/receipts",
+        headers=headers,
+        json={"amount": 40, "payment_method": "PIX", "paid_at": str(date.today())},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "PARCIAL"
+    assert first.json()["balance_due"] == "80.00"
 
 
 def test_duplicate_email_is_blocked(client: TestClient) -> None:

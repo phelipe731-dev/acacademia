@@ -9,9 +9,18 @@ from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.enums import PaymentMethod, PaymentStatus, UserRole
 from app.models.payment import Payment, PaymentSplit
+from app.models.receipt import FinancialReceipt
 from app.models.student import Student
 from app.models.user import User
-from app.schemas.payment import PaymentCancel, PaymentCreate, PaymentRead, PaymentSplitCreate, PaymentUpdate, PaymentWithStudent
+from app.schemas.payment import (
+    FinancialReceiptCreate,
+    PaymentCancel,
+    PaymentCreate,
+    PaymentRead,
+    PaymentSplitCreate,
+    PaymentUpdate,
+    PaymentWithStudent,
+)
 from app.schemas.generation import MonthlyPaymentsGenerateRequest, MonthlyPaymentsGenerateResult
 from app.schemas.report import DefaulterReportRow
 from app.services.audit import model_snapshot, record_audit
@@ -21,6 +30,7 @@ from app.services.payments import (
     refresh_all_student_statuses,
     update_student_status_from_payments,
 )
+from app.services.receipts import add_payment_receipt
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -68,7 +78,12 @@ def list_payments(
     refresh_all_student_statuses(db)
     stmt = (
         select(Payment)
-        .options(selectinload(Payment.student), selectinload(Payment.created_by), selectinload(Payment.splits))
+        .options(
+            selectinload(Payment.student),
+            selectinload(Payment.created_by),
+            selectinload(Payment.splits),
+            selectinload(Payment.receipts),
+        )
         .order_by(Payment.due_date.desc())
     )
     if status_filter:
@@ -101,8 +116,9 @@ def create_payment(
         .where(
             Payment.student_id == payload.student_id,
             Payment.due_date == payload.due_date,
-            Payment.status.in_([PaymentStatus.PENDENTE, PaymentStatus.ATRASADO]),
+            Payment.status.in_([PaymentStatus.PENDENTE, PaymentStatus.PARCIAL, PaymentStatus.ATRASADO]),
         )
+        .options(selectinload(Payment.receipts), selectinload(Payment.splits))
         .order_by(Payment.id)
     ).first()
     if payload.status == PaymentStatus.PAGO and existing_open is not None:
@@ -116,6 +132,20 @@ def create_payment(
             existing_open.created_by_id = current_user.id
         normalize_payment_status(existing_open)
         sync_payment_splits(existing_open, payload.splits)
+        if existing_open.amount > 0:
+            split_pairs = payload.splits or [PaymentSplitCreate(payment_method=payload.payment_method, amount=payload.amount)]
+            for split in split_pairs:
+                add_payment_receipt(
+                    existing_open,
+                    FinancialReceiptCreate(
+                        amount=split.amount,
+                        paid_at=payload.paid_at,
+                        payment_method=split.payment_method,
+                        notes=payload.notes,
+                    ),
+                    current_user,
+                )
+            sync_payment_splits(existing_open, payload.splits)
         db.flush()
         update_student_status_from_payments(db, student.id)
         db.flush()
@@ -151,6 +181,20 @@ def create_payment(
     normalize_payment_status(payment)
     db.add(payment)
     sync_payment_splits(payment, payload.splits)
+    if payload.status == PaymentStatus.PAGO and payment.amount > 0:
+        split_pairs = payload.splits or [PaymentSplitCreate(payment_method=payload.payment_method, amount=payload.amount)]
+        for split in split_pairs:
+            add_payment_receipt(
+                payment,
+                FinancialReceiptCreate(
+                    amount=split.amount,
+                    paid_at=payload.paid_at,
+                    payment_method=split.payment_method,
+                    notes=payload.notes,
+                ),
+                current_user,
+            )
+        sync_payment_splits(payment, payload.splits)
     db.flush()
     record_audit(
         db,
@@ -215,15 +259,44 @@ def mark_payment_paid(
     payment = db.get(Payment, payment_id)
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mensalidade nao encontrada.")
-    before = model_snapshot(payment)
-    payment.status = PaymentStatus.PAGO
-    payment.paid_at = payload.paid_at or date.today()
-    if payload.payment_method:
-        payment.payment_method = payload.payment_method
-    if payload.notes is not None:
-        payment.notes = payload.notes
     if payment.created_by_id is None:
         payment.created_by_id = current_user.id
+    before = model_snapshot(payment)
+    if payment.amount > 0 and payment.balance_due > 0:
+        splits = payload.splits if "splits" in payload.model_fields_set else None
+        if splits:
+            total = sum((split.amount for split in splits), Decimal("0.00")).quantize(Decimal("0.01"))
+            if total != payment.balance_due:
+                raise HTTPException(status_code=400, detail="A soma dos recebimentos precisa ser igual ao saldo em aberto.")
+            for split in splits:
+                add_payment_receipt(
+                    payment,
+                    FinancialReceiptCreate(
+                        amount=split.amount,
+                        paid_at=payload.paid_at,
+                        payment_method=split.payment_method,
+                        notes=payload.notes,
+                    ),
+                    current_user,
+                )
+        else:
+            add_payment_receipt(
+                payment,
+                FinancialReceiptCreate(
+                    amount=payment.balance_due,
+                    paid_at=payload.paid_at,
+                    payment_method=payload.payment_method or PaymentMethod.PIX,
+                    notes=payload.notes,
+                ),
+                current_user,
+            )
+    else:
+        payment.status = PaymentStatus.PAGO
+        payment.paid_at = payload.paid_at or date.today()
+        if payload.payment_method:
+            payment.payment_method = payload.payment_method
+        if payload.notes is not None:
+            payment.notes = payload.notes
     normalize_payment_status(payment)
     sync_payment_splits(payment, payload.splits if "splits" in payload.model_fields_set else None)
     # flush antes de recalcular o status do aluno (ver update_payment).
@@ -237,6 +310,39 @@ def mark_payment_paid(
         entity_id=payment.id,
         action="PAY",
         summary=f"Mensalidade marcada como paga #{payment.id}.",
+        before=before,
+        after=model_snapshot(payment),
+    )
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+@router.post("/{payment_id}/receipts", response_model=PaymentRead)
+def receive_payment(
+    payment_id: int,
+    payload: FinancialReceiptCreate,
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
+    db: Session = Depends(get_db),
+) -> Payment:
+    payment = db.scalars(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .options(selectinload(Payment.receipts), selectinload(Payment.splits))
+    ).one_or_none()
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Mensalidade nao encontrada.")
+    before = model_snapshot(payment)
+    add_payment_receipt(payment, payload, current_user)
+    db.flush()
+    update_student_status_from_payments(db, payment.student_id)
+    record_audit(
+        db,
+        current_user,
+        entity_type="PAYMENT",
+        entity_id=payment.id,
+        action="RECEIVE",
+        summary=f"Recebimento de R$ {payload.amount:.2f} registrado na mensalidade #{payment.id}.",
         before=before,
         after=model_snapshot(payment),
     )
@@ -298,8 +404,13 @@ def upcoming_payments(
     return list(
         db.scalars(
             select(Payment)
-            .where(Payment.status == PaymentStatus.PENDENTE, Payment.due_date >= today, Payment.due_date <= limit)
-            .options(selectinload(Payment.student), selectinload(Payment.created_by), selectinload(Payment.splits))
+            .where(Payment.status.in_([PaymentStatus.PENDENTE, PaymentStatus.PARCIAL]), Payment.due_date >= today, Payment.due_date <= limit)
+            .options(
+                selectinload(Payment.student),
+                selectinload(Payment.created_by),
+                selectinload(Payment.splits),
+                selectinload(Payment.receipts),
+            )
             .order_by(Payment.due_date)
         ).all()
     )

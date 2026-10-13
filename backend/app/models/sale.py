@@ -90,3 +90,17 @@ class SaleInstallment(Base):
 
     sale = relationship("Sale", back_populates="installments")
     student = relationship("Student", back_populates="sale_installments")
+    receipts = relationship(
+        "FinancialReceipt",
+        back_populates="sale_installment",
+        cascade="all, delete-orphan",
+        order_by="FinancialReceipt.id",
+    )
+
+    @property
+    def total_paid(self) -> Decimal:
+        return sum((receipt.amount for receipt in self.receipts), Decimal("0.00")).quantize(Decimal("0.01"))
+
+    @property
+    def balance_due(self) -> Decimal:
+        return max((self.amount - self.total_paid).quantize(Decimal("0.01")), Decimal("0.00"))

@@ -1,10 +1,10 @@
 export type UserRole = "ADMIN" | "RECEPCAO" | "PROFESSOR";
 export type StudentStatus = "ATIVO" | "INATIVO" | "INADIMPLENTE";
-export type PaymentStatus = "PENDENTE" | "PAGO" | "ATRASADO" | "CANCELADO";
+export type PaymentStatus = "PENDENTE" | "PARCIAL" | "PAGO" | "ATRASADO" | "CANCELADO";
 export type PaymentMethod = "DINHEIRO" | "PIX" | "CARTAO" | "OUTRO";
 export type SalePaymentMethod = PaymentMethod | "PRAZO";
 export type SaleStatus = "CONCLUIDA" | "CANCELADA";
-export type SaleInstallmentStatus = "ABERTA" | "PAGA" | "ATRASADA" | "CANCELADA";
+export type SaleInstallmentStatus = "ABERTA" | "PARCIAL" | "PAGA" | "ATRASADA" | "CANCELADA";
 export type ProductStatus = "ATIVO" | "INATIVO";
 export type StockMovementType = "ENTRADA" | "SAIDA" | "SAIDA_VENDA" | "AJUSTE";
 export type TrainingMediaType = "IMAGE" | "VIDEO" | "EXTERNAL_IMAGE" | "EXTERNAL_VIDEO";
@@ -42,6 +42,9 @@ export interface Student {
   notes?: string | null;
   created_at: string;
   updated_at: string;
+  receipts?: FinancialReceipt[];
+  total_paid?: string;
+  balance_due?: string;
 }
 
 export interface CheckIn {
@@ -91,6 +94,9 @@ export interface Payment {
   updated_at: string;
   student?: Student;
   splits?: PaymentSplit[];
+  receipts?: FinancialReceipt[];
+  total_paid?: string;
+  balance_due?: string;
 }
 
 export interface PaymentSplit {
@@ -98,6 +104,18 @@ export interface PaymentSplit {
   payment_id: number;
   payment_method: PaymentMethod;
   amount: string;
+  created_at: string;
+}
+
+export interface FinancialReceipt {
+  id: number;
+  payment_id?: number | null;
+  sale_installment_id?: number | null;
+  amount: string;
+  paid_at: string;
+  payment_method: PaymentMethod;
+  notes?: string | null;
+  created_by_id?: number | null;
   created_at: string;
 }
 
@@ -149,6 +167,9 @@ export interface SaleInstallment {
   notes?: string | null;
   created_at: string;
   updated_at: string;
+  receipts?: FinancialReceipt[];
+  total_paid?: string;
+  balance_due?: string;
 }
 
 export interface Sale {

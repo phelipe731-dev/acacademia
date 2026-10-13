@@ -21,7 +21,7 @@ from app.services.audit import model_snapshot, record_audit
 def sale_load_options():
     return (
         selectinload(Sale.items).selectinload(SaleItem.product),
-        selectinload(Sale.installments),
+        selectinload(Sale.installments).selectinload(SaleInstallment.receipts),
         selectinload(Sale.created_by),
         selectinload(Sale.student),
     )
@@ -47,6 +47,14 @@ def split_installment_amounts(total: Decimal, installments_count: int) -> list[D
 
 def normalize_sale_installment_status(installment: SaleInstallment, today: date | None = None) -> None:
     current_day = today or business_today()
+    if installment.status not in (SaleInstallmentStatus.CANCELADA,) and installment.total_paid >= installment.amount:
+        installment.status = SaleInstallmentStatus.PAGA
+        if installment.paid_at is None and installment.receipts:
+            installment.paid_at = max(receipt.paid_at for receipt in installment.receipts)
+        return
+    if installment.status not in (SaleInstallmentStatus.CANCELADA,) and installment.total_paid > 0:
+        installment.status = SaleInstallmentStatus.PARCIAL
+        return
     if installment.status == SaleInstallmentStatus.PAGA:
         if installment.paid_at is None:
             installment.paid_at = current_day
@@ -60,7 +68,7 @@ def refresh_overdue_sale_installments(db: Session, today: date | None = None) ->
     current_day = today or business_today()
     installments = db.scalars(
         select(SaleInstallment).where(
-            SaleInstallment.status == SaleInstallmentStatus.ABERTA,
+            SaleInstallment.status.in_([SaleInstallmentStatus.ABERTA, SaleInstallmentStatus.PARCIAL]),
             SaleInstallment.due_date < current_day,
         )
     ).all()

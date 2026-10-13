@@ -14,6 +14,7 @@ from app.core.tz import business_today, day_after_utc, day_start_utc
 from app.db.session import get_db
 from app.models.enums import PaymentStatus, ProductStatus, SaleStatus, UserRole
 from app.models.payment import Payment
+from app.models.receipt import FinancialReceipt
 from app.models.product import Product
 from app.models.sale import Sale, SaleItem
 from app.models.student import Student
@@ -134,20 +135,25 @@ def payments_open_report(
 ) -> list[OpenPaymentReportRow]:
     start, end = default_dates(start_date, end_date)
     refresh_all_student_statuses(db)
+    paid_total = (
+        select(func.coalesce(func.sum(FinancialReceipt.amount), Decimal("0.00")))
+        .where(FinancialReceipt.payment_id == Payment.id)
+        .scalar_subquery()
+    )
     rows = db.execute(
         select(
             Payment.id,
             Student.id,
             Student.name,
             Student.phone,
-            Payment.amount,
+            (Payment.amount - paid_total).label("balance_due"),
             Payment.due_date,
             Payment.status,
             Payment.payment_method,
         )
         .join(Student, Student.id == Payment.student_id)
         .where(
-            Payment.status.in_([PaymentStatus.PENDENTE, PaymentStatus.ATRASADO]),
+            Payment.status.in_([PaymentStatus.PENDENTE, PaymentStatus.PARCIAL, PaymentStatus.ATRASADO]),
             Payment.due_date >= start,
             Payment.due_date <= end,
         )
@@ -201,12 +207,17 @@ def defaulters_report(
     db: Session = Depends(get_db),
 ) -> list[DefaulterReportRow]:
     refresh_all_student_statuses(db)
+    paid_total = (
+        select(func.coalesce(func.sum(FinancialReceipt.amount), Decimal("0.00")))
+        .where(FinancialReceipt.payment_id == Payment.id)
+        .scalar_subquery()
+    )
     rows = db.execute(
         select(
             Student.id,
             Student.name,
             Student.phone,
-            func.coalesce(func.sum(Payment.amount), Decimal("0.00")),
+            func.coalesce(func.sum(Payment.amount - paid_total), Decimal("0.00")),
             func.min(Payment.due_date),
         )
         .join(Payment, Payment.student_id == Student.id)

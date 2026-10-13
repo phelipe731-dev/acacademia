@@ -271,7 +271,7 @@ def list_student_payments(
         db.scalars(
             select(Payment)
             .where(Payment.student_id == student_id)
-            .options(selectinload(Payment.created_by), selectinload(Payment.splits))
+            .options(selectinload(Payment.created_by), selectinload(Payment.splits), selectinload(Payment.receipts))
             .order_by(Payment.due_date.desc())
         ).all()
     )

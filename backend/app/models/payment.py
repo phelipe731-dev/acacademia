@@ -46,6 +46,20 @@ class Payment(Base):
         cascade="all, delete-orphan",
         order_by="PaymentSplit.id",
     )
+    receipts = relationship(
+        "FinancialReceipt",
+        back_populates="payment",
+        cascade="all, delete-orphan",
+        order_by="FinancialReceipt.id",
+    )
+
+    @property
+    def total_paid(self) -> Decimal:
+        return sum((receipt.amount for receipt in self.receipts), Decimal("0.00")).quantize(Decimal("0.01"))
+
+    @property
+    def balance_due(self) -> Decimal:
+        return max((self.amount - self.total_paid).quantize(Decimal("0.01")), Decimal("0.00"))
 
 
 class PaymentSplit(Base):

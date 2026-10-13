@@ -15,6 +15,7 @@ class StudentStatus(str, Enum):
 
 class PaymentStatus(str, Enum):
     PENDENTE = "PENDENTE"
+    PARCIAL = "PARCIAL"
     PAGO = "PAGO"
     ATRASADO = "ATRASADO"
     CANCELADO = "CANCELADO"
@@ -42,6 +43,7 @@ class SaleStatus(str, Enum):
 
 class SaleInstallmentStatus(str, Enum):
     ABERTA = "ABERTA"
+    PARCIAL = "PARCIAL"
     PAGA = "PAGA"
     ATRASADA = "ATRASADA"
     CANCELADA = "CANCELADA"

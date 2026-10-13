@@ -63,6 +63,7 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [cancellingSaleId, setCancellingSaleId] = useState<number | null>(null);
+  const [receivingInstallmentId, setReceivingInstallmentId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
   const canCancelSales = getSession()?.user.role === "ADMIN";
 
@@ -174,6 +175,38 @@ export default function SalesPage() {
       setMessage({ text: getErrorMessage(error, "Erro ao registrar venda."), type: "error" });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleReceiveInstallment(installment: NonNullable<Sale["installments"]>[number]) {
+    if (receivingInstallmentId !== null) return;
+    const balance = Number(installment.balance_due ?? installment.amount);
+    const amountText = window.prompt("Valor recebido agora", balance.toFixed(2));
+    if (amountText === null) return;
+    const amount = Number(amountText.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0 || amount > balance) {
+      setMessage({ text: `Informe um valor entre R$ 0,01 e R$ ${balance.toFixed(2)}.`, type: "error" });
+      return;
+    }
+    const methodText = window.prompt("Forma de pagamento: PIX, DINHEIRO, CARTAO ou OUTRO", installment.payment_method || "PIX");
+    if (methodText === null) return;
+    const paymentMethod = methodText.toUpperCase();
+    if (!installmentMethods.includes(paymentMethod as PaymentMethod)) {
+      setMessage({ text: "Forma de pagamento invalida.", type: "error" });
+      return;
+    }
+    setReceivingInstallmentId(installment.id);
+    try {
+      await apiFetch(`/sales/installments/${installment.id}/receipts`, {
+        method: "POST",
+        body: JSON.stringify({ amount, payment_method: paymentMethod, paid_at: todayDateInput() })
+      });
+      setMessage({ text: amount < balance ? "Recebimento parcial registrado." : "Parcela quitada.", type: "success" });
+      await load();
+    } catch (error) {
+      setMessage({ text: getErrorMessage(error, "Erro ao registrar recebimento."), type: "error" });
+    } finally {
+      setReceivingInstallmentId(null);
     }
   }
 
@@ -379,6 +412,27 @@ export default function SalesPage() {
                   <p className="text-xs text-ink/55">
                     {sale.student?.name || "Aluno nao informado"} · {formatDate(sale.created_at)} · {salePaymentLabel(sale)}
                   </p>
+                  {sale.payment_method === "PRAZO" && sale.installments?.length ? (
+                    <div className="mt-3 space-y-2 border-t border-line pt-3">
+                      {sale.installments.map((installment) => (
+                        <div key={installment.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span>
+                            Parcela {installment.installment_number}/{sale.installments_count} · saldo {formatMoney(installment.balance_due ?? installment.amount)}
+                          </span>
+                          {installment.status !== "PAGA" && installment.status !== "CANCELADA" ? (
+                            <button
+                              className="btn-secondary px-2.5 py-1.5 text-xs"
+                              type="button"
+                              disabled={receivingInstallmentId === installment.id}
+                              onClick={() => handleReceiveInstallment(installment)}
+                            >
+                              {receivingInstallmentId === installment.id ? "Salvando..." : "Receber"}
+                            </button>
+                          ) : <StatusBadge value={installment.status} />}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   {canCancelSales && (sale.status ?? "CONCLUIDA") !== "CANCELADA" ? (
                     <button
                       className="btn-secondary mt-3 w-full justify-center text-danger"
