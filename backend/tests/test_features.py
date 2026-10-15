@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.core.tz import business_today
 from app.models.checkin import CheckIn
+from app.schemas.payment import FinancialReceiptRead
 from tests.conftest import TestingSessionLocal, create_admin_and_headers, create_product, create_student
 
 
@@ -73,6 +74,21 @@ def test_monthly_payment_accepts_partial_receipts(client: TestClient) -> None:
     assert second.status_code == 200, second.text
     assert second.json()["status"] == "PAGO"
     assert len(second.json()["receipts"]) == 2
+
+
+def test_legacy_zero_receipt_is_serializable() -> None:
+    receipt = FinancialReceiptRead(
+        id=1,
+        payment_id=10,
+        sale_installment_id=None,
+        created_by_id=None,
+        amount=0,
+        paid_at=None,
+        payment_method="PIX",
+        notes="Registro histórico cancelado",
+        created_at=datetime.now(timezone.utc),
+    )
+    assert receipt.amount == 0
 
 
 def test_sale_installment_accepts_partial_receipts(client: TestClient) -> None:

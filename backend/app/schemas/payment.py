@@ -45,8 +45,8 @@ class PaymentSplitRead(PaymentSplitBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class FinancialReceiptCreate(BaseModel):
-    amount: Decimal = Field(gt=0)
+class FinancialReceiptBase(BaseModel):
+    amount: Decimal
     paid_at: date | None = None
     payment_method: PaymentMethod = PaymentMethod.PIX
     notes: str | None = None
@@ -57,7 +57,11 @@ class FinancialReceiptCreate(BaseModel):
         return value.quantize(Decimal("0.01"))
 
 
-class FinancialReceiptRead(FinancialReceiptCreate):
+class FinancialReceiptCreate(FinancialReceiptBase):
+    amount: Decimal = Field(gt=0)
+
+
+class FinancialReceiptRead(FinancialReceiptBase):
     id: int
     payment_id: int | None = None
     sale_installment_id: int | None = None
