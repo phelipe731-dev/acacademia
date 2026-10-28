@@ -16,6 +16,7 @@ def list_audit_logs(
     entity_type: str | None = Query(default=None),
     action: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     _: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ) -> list[AuditLog]:
@@ -23,6 +24,7 @@ def list_audit_logs(
         select(AuditLog)
         .options(selectinload(AuditLog.created_by))
         .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .offset(offset)
         .limit(limit)
     )
     if entity_type:

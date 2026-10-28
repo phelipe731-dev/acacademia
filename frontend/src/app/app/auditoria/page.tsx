@@ -30,14 +30,20 @@ export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [entityType, setEntityType] = useState("");
   const [action, setAction] = useState("");
+  const [auditOffset, setAuditOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function load() {
-    const params = new URLSearchParams({ limit: "150" });
+  async function load(append = false) {
+    const offset = append ? auditOffset : 0;
+    const params = new URLSearchParams({ limit: "100", offset: String(offset) });
     if (entityType) params.set("entity_type", entityType);
     if (action) params.set("action", action);
-    setLogs(await apiFetch<AuditLog[]>(`/audit-logs?${params.toString()}`));
+    const nextLogs = await apiFetch<AuditLog[]>(`/audit-logs?${params.toString()}`);
+    setLogs((current) => (append ? [...current, ...nextLogs] : nextLogs));
+    setAuditOffset(offset + nextLogs.length);
+    setHasMore(nextLogs.length === 100);
   }
 
   useEffect(() => {
@@ -143,6 +149,22 @@ export default function AuditPage() {
           )}
         </div>
       </section>
+
+      {!loading && hasMore ? (
+        <button
+          className="btn-secondary w-full sm:w-auto"
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            load(true)
+              .catch((error) => setMessage(getErrorMessage(error, "Erro ao carregar mais eventos.")))
+              .finally(() => setLoading(false));
+          }}
+          disabled={loading}
+        >
+          Carregar mais eventos
+        </button>
+      ) : null}
     </div>
   );
 }

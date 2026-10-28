@@ -85,7 +85,7 @@ export default function SalesPage() {
     ]);
     setStudents(studentsData);
     setProducts(productsData);
-    setSales(salesData.slice(0, 10));
+    setSales(salesData);
   }
 
   useEffect(() => {
