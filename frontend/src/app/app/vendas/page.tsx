@@ -1,7 +1,8 @@
 "use client";
 
-import { Plus, Receipt, ShoppingCart, Trash2, X, XCircle } from "lucide-react";
+import { CalendarDays, Eye, MoreHorizontal, Plus, Receipt, Search, ShoppingCart, Trash2, X, XCircle } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Message } from "@/components/Message";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -72,6 +73,13 @@ export default function SalesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [cancellingSaleId, setCancellingSaleId] = useState<number | null>(null);
   const [adjustmentDraft, setAdjustmentDraft] = useState<SaleAdjustmentDraft | null>(null);
+  const [detailSale, setDetailSale] = useState<Sale | null>(null);
+  const [openActionSaleId, setOpenActionSaleId] = useState<number | null>(null);
+  const [saleSearch, setSaleSearch] = useState("");
+  const [salePeriod, setSalePeriod] = useState("7");
+  const [saleStatus, setSaleStatus] = useState("TODOS");
+  const [salePayment, setSalePayment] = useState("TODOS");
+  const [salePage, setSalePage] = useState(1);
   const [receivingInstallmentId, setReceivingInstallmentId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
   const canManageSales = ["ADMIN", "RECEPCAO"].includes(getSession()?.user.role ?? "");
@@ -109,6 +117,33 @@ export default function SalesPage() {
       return sum + (product ? Number(product.sale_price) * Number(item.quantity || 0) : 0);
     }, 0);
   }, [items, products]);
+
+  const filteredSales = useMemo(() => {
+    const now = new Date();
+    const periodDays = salePeriod === "todos" ? null : Number(salePeriod);
+    const periodStart = periodDays ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays + 1) : null;
+    const query = saleSearch.trim().toLowerCase();
+    return sales.filter((sale) => {
+      const createdAt = new Date(sale.created_at);
+      const matchesQuery = !query || String(sale.id).includes(query) || (sale.student?.name || "").toLowerCase().includes(query);
+      const matchesPeriod = !periodStart || createdAt >= periodStart;
+      const matchesStatus = saleStatus === "TODOS" || (sale.status ?? "CONCLUIDA") === saleStatus;
+      const matchesPayment = salePayment === "TODOS" || sale.payment_method === salePayment;
+      return matchesQuery && matchesPeriod && matchesStatus && matchesPayment;
+    });
+  }, [salePayment, salePeriod, saleSearch, saleStatus, sales]);
+
+  const salesPerPage = 8;
+  const salesPageCount = Math.max(1, Math.ceil(filteredSales.length / salesPerPage));
+  const visibleSales = filteredSales.slice((salePage - 1) * salesPerPage, salePage * salesPerPage);
+  const todayKey = todayDateInput();
+  const todaySales = sales.filter((sale) => sale.created_at.slice(0, 10) === todayKey && (sale.status ?? "CONCLUIDA") !== "CANCELADA");
+  const todayTotal = todaySales.reduce((sum, sale) => sum + Number(sale.total_amount), 0);
+  const averageTicket = todaySales.length ? todayTotal / todaySales.length : 0;
+
+  useEffect(() => {
+    setSalePage((current) => Math.min(current, salesPageCount));
+  }, [salesPageCount]);
 
   function updateItem(key: string, value: Partial<DraftItem>) {
     setItems((current) => current.map((item) => (item.key === key ? { ...item, ...value } : item)));
@@ -271,9 +306,24 @@ export default function SalesPage() {
     <div className="space-y-6 animate-fade-up">
       <PageHeader title="Vendas" subtitle="Venda de suplementos com baixa automatica." />
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="panel flex items-center gap-3 p-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand"><ShoppingCart className="h-5 w-5" aria-hidden /></div>
+          <div><p className="text-xs font-medium text-ink/55">Vendas do dia</p><p className="mt-0.5 text-xl font-bold text-ink">{formatMoney(todayTotal)}</p></div>
+        </div>
+        <div className="panel flex items-center gap-3 p-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand"><Receipt className="h-5 w-5" aria-hidden /></div>
+          <div><p className="text-xs font-medium text-ink/55">Quantidade de vendas</p><p className="mt-0.5 text-xl font-bold text-ink">{todaySales.length}</p></div>
+        </div>
+        <div className="panel flex items-center gap-3 p-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand"><CalendarDays className="h-5 w-5" aria-hidden /></div>
+          <div><p className="text-xs font-medium text-ink/55">Ticket médio</p><p className="mt-0.5 text-xl font-bold text-ink">{formatMoney(averageTicket)}</p></div>
+        </div>
+      </div>
+
       {message ? <Message message={message.text} type={message.type} /> : null}
 
-      <section className="grid items-start gap-4 xl:grid-cols-[1fr_380px]">
+      <section>
         <form onSubmit={handleSale} className="panel space-y-4 p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="panel-title">Nova venda</h2>
@@ -449,79 +499,145 @@ export default function SalesPage() {
           </button>
         </form>
 
-        <aside className="panel p-5">
-          <h2 className="panel-title">Vendas recentes</h2>
-          <div className="mt-4 space-y-2">
-            {loading ? (
-              <SkeletonRows rows={4} />
-            ) : sales.length === 0 ? (
-              <EmptyState icon={Receipt} title="Nenhuma venda registrada" hint="As vendas mais recentes aparecem aqui." />
-            ) : (
-              sales.map((sale) => (
-                <div key={sale.id} className="rounded-lg border border-line px-3.5 py-3 transition hover:bg-paper/70">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-ink">Venda #{sale.id}</p>
-                      <StatusBadge value={sale.status ?? "CONCLUIDA"} />
-                    </div>
-                    <p className="text-sm font-bold text-brand">{formatMoney(sale.total_amount)}</p>
-                  </div>
-                  <p className="text-xs text-ink/55">
-                    {sale.student?.name || "Aluno nao informado"} · {formatDate(sale.created_at)} · {salePaymentLabel(sale)}
-                  </p>
-                  {sale.payment_method === "PRAZO" && sale.installments?.length ? (
-                    <div className="mt-3 space-y-2 border-t border-line pt-3">
-                      {sale.installments.map((installment) => (
-                        <div key={installment.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                          <span>
-                            Parcela {installment.installment_number}/{sale.installments_count} · saldo {formatMoney(installment.balance_due ?? installment.amount)}
-                          </span>
-                          {installment.status !== "PAGA" && installment.status !== "CANCELADA" ? (
-                            <button
-                              className="btn-secondary px-2.5 py-1.5 text-xs"
-                              type="button"
-                              disabled={receivingInstallmentId === installment.id}
-                              onClick={() => handleReceiveInstallment(installment)}
-                            >
-                              {receivingInstallmentId === installment.id ? "Salvando..." : "Receber"}
-                            </button>
-                          ) : <StatusBadge value={installment.status} />}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {canManageSales && (sale.status ?? "CONCLUIDA") !== "CANCELADA" ? (
-                    <button
-                      className="btn-secondary mt-3 w-full justify-center"
-                      type="button"
-                      disabled={cancellingSaleId === sale.id}
-                      onClick={() => openAdjustmentModal(sale)}
-                    >
-                      {cancellingSaleId === sale.id ? "Salvando..." : "Corrigir pagamento"}
-                    </button>
-                  ) : null}
-                  {canManageSales && (sale.status ?? "CONCLUIDA") !== "CANCELADA" ? (
-                    <button
-                      className="btn-secondary mt-3 w-full justify-center text-danger"
-                      type="button"
-                      disabled={cancellingSaleId === sale.id}
-                      onClick={() => handleCancelSale(sale)}
-                    >
-                      <XCircle className="h-4 w-4" aria-hidden />
-                      {cancellingSaleId === sale.id ? "Cancelando..." : "Cancelar venda"}
-                    </button>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
       </section>
 
-      {adjustmentDraft ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-6" role="presentation">
+      <section className="panel p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-brand" aria-hidden />
+              <h2 className="panel-title">Histórico de vendas</h2>
+            </div>
+            <p className="mt-1 text-sm text-ink/55">Consulte, corrija ou cancele lançamentos com rapidez.</p>
+          </div>
+          <button className="btn-secondary" type="button" disabled title="Exportação será adicionada aos relatórios">
+            Exportar
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(240px,1fr)_180px_160px_160px_auto]">
+          <label className="relative block">
+            <span className="sr-only">Buscar venda ou aluno</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/45" aria-hidden />
+            <input className="field pl-9" value={saleSearch} onChange={(event) => { setSaleSearch(event.target.value); setSalePage(1); }} placeholder="Buscar por nº da venda ou aluno..." />
+          </label>
+          <label>
+            <span className="sr-only">Período</span>
+            <select className="field" value={salePeriod} onChange={(event) => { setSalePeriod(event.target.value); setSalePage(1); }}>
+              <option value="7">Últimos 7 dias</option>
+              <option value="30">Últimos 30 dias</option>
+              <option value="90">Últimos 90 dias</option>
+              <option value="todos">Todo o período</option>
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Status</span>
+            <select className="field" value={saleStatus} onChange={(event) => { setSaleStatus(event.target.value); setSalePage(1); }}>
+              <option value="TODOS">Status: Todos</option>
+              <option value="CONCLUIDA">Concluídas</option>
+              <option value="CANCELADA">Canceladas</option>
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Pagamento</span>
+            <select className="field" value={salePayment} onChange={(event) => { setSalePayment(event.target.value); setSalePage(1); }}>
+              <option value="TODOS">Pagamento: Todos</option>
+              {paymentMethods.map((method) => <option key={method} value={method}>{method}</option>)}
+            </select>
+          </label>
+          <button className="btn-secondary whitespace-nowrap" type="button" onClick={() => { setSaleSearch(""); setSalePeriod("7"); setSaleStatus("TODOS"); setSalePayment("TODOS"); setSalePage(1); }}>
+            Limpar filtros
+          </button>
+        </div>
+
+        <div className="mt-4 overflow-x-auto rounded-lg border border-line">
+          <table className="min-w-[860px] w-full text-sm">
+            <thead className="bg-paper text-left text-xs font-semibold uppercase tracking-wide text-ink/60">
+              <tr>
+                <th className="px-4 py-3">Venda</th>
+                <th className="px-4 py-3">Data e hora</th>
+                <th className="px-4 py-3">Aluno</th>
+                <th className="px-4 py-3">Pagamento</th>
+                <th className="px-4 py-3 text-right">Valor</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line/70">
+              {loading ? (
+                <tr><td className="px-4 py-8" colSpan={7}><SkeletonRows rows={3} /></td></tr>
+              ) : visibleSales.length === 0 ? (
+                <tr><td className="px-4 py-10" colSpan={7}><EmptyState icon={Receipt} title="Nenhuma venda encontrada" hint="Ajuste os filtros ou registre uma nova venda." /></td></tr>
+              ) : visibleSales.map((sale) => (
+                <tr key={sale.id} className="transition-colors hover:bg-paper/70">
+                  <td className="whitespace-nowrap px-4 py-3 font-semibold text-ink">#{sale.id}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-ink/70">{formatDate(sale.created_at)} <span className="text-xs text-ink/45">{new Date(sale.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span></td>
+                  <td className="max-w-[240px] truncate px-4 py-3 font-medium text-ink">{sale.student?.name || "Venda avulsa"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-ink/70">{salePaymentLabel(sale)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-ink">{formatMoney(sale.total_amount)}</td>
+                  <td className="px-4 py-3"><StatusBadge value={sale.status ?? "CONCLUIDA"} /></td>
+                  <td className="relative px-4 py-3 text-right">
+                    <button className="btn-secondary h-9 w-9 px-0" type="button" aria-label={`Ações da venda ${sale.id}`} title="Ações" onClick={() => setOpenActionSaleId((current) => current === sale.id ? null : sale.id)}>
+                      <MoreHorizontal className="h-4 w-4" aria-hidden />
+                    </button>
+                    {openActionSaleId === sale.id ? (
+                      <div className="absolute right-4 top-12 z-20 w-48 rounded-lg border border-line bg-white p-1.5 text-left shadow-lift">
+                        <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-ink hover:bg-paper" type="button" onClick={() => { setDetailSale(sale); setOpenActionSaleId(null); }}><Eye className="h-4 w-4" aria-hidden /> Visualizar detalhes</button>
+                        {canManageSales && (sale.status ?? "CONCLUIDA") !== "CANCELADA" ? <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-ink hover:bg-paper" type="button" onClick={() => { openAdjustmentModal(sale); setOpenActionSaleId(null); }}><Receipt className="h-4 w-4" aria-hidden /> Corrigir pagamento</button> : null}
+                        {canManageSales && (sale.status ?? "CONCLUIDA") !== "CANCELADA" ? <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-danger hover:bg-danger-soft" type="button" onClick={() => { setOpenActionSaleId(null); handleCancelSale(sale); }}><XCircle className="h-4 w-4" aria-hidden /> Cancelar venda</button> : null}
+                      </div>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 text-sm text-ink/60 sm:flex-row sm:items-center sm:justify-between">
+          <span>Mostrando {filteredSales.length ? (salePage - 1) * salesPerPage + 1 : 0}–{Math.min(salePage * salesPerPage, filteredSales.length)} de {filteredSales.length} vendas</span>
+          <div className="flex items-center gap-1">
+            <button className="btn-secondary h-9 w-9 px-0" type="button" disabled={salePage === 1} onClick={() => setSalePage((page) => page - 1)} aria-label="Página anterior">‹</button>
+            <span className="px-3 font-semibold text-ink">{salePage} / {salesPageCount}</span>
+            <button className="btn-secondary h-9 w-9 px-0" type="button" disabled={salePage >= salesPageCount} onClick={() => setSalePage((page) => page + 1)} aria-label="Próxima página">›</button>
+          </div>
+        </div>
+      </section>
+
+      {detailSale && typeof document !== "undefined" ? createPortal(
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-6" role="presentation">
+          <div className="relative z-10 max-h-[92vh] w-full overflow-y-auto border border-line bg-white text-ink shadow-2xl sm:max-w-xl sm:rounded-xl" role="dialog" aria-modal="true" aria-labelledby="sale-detail-title">
+            <div className="flex items-center justify-between border-b border-line px-5 py-4">
+              <div>
+                <h2 id="sale-detail-title" className="text-lg font-bold">Detalhes da venda #{detailSale.id}</h2>
+                <p className="mt-1 text-sm text-ink/55">{formatDate(detailSale.created_at)} · {new Date(detailSale.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p>
+              </div>
+              <button className="btn-secondary h-10 w-10 px-0" type="button" aria-label="Fechar" title="Fechar" onClick={() => setDetailSale(null)}><X className="h-4 w-4" aria-hidden /></button>
+            </div>
+            <div className="space-y-5 p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><p className="label">Aluno</p><p className="font-semibold">{detailSale.student?.name || "Venda avulsa"}</p></div>
+                <div><p className="field-label">Status</p><StatusBadge value={detailSale.status ?? "CONCLUIDA"} /></div>
+                <div><p className="label">Pagamento</p><p className="font-semibold">{salePaymentLabel(detailSale)}</p></div>
+                <div><p className="field-label">Total</p><p className="font-semibold text-brand">{formatMoney(detailSale.total_amount)}</p></div>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold">Produtos vendidos</h3>
+                <div className="mt-2 divide-y divide-line rounded-lg border border-line">
+                  {detailSale.items.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 px-3 py-2.5 text-sm"><span>{item.product?.name || `Produto #${item.product_id}`} <span className="text-ink/55">x{item.quantity}</span></span><span className="font-semibold">{formatMoney(item.subtotal)}</span></div>)}
+                </div>
+              </div>
+              {detailSale.installments?.length ? <div><h3 className="text-sm font-bold">Parcelas</h3><div className="mt-2 space-y-2">{detailSale.installments.map((installment) => <div key={installment.id} className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm"><span>Parcela {installment.installment_number}/{detailSale.installments_count} · vence {formatDate(installment.due_date)}</span><span className="font-semibold">Saldo {formatMoney(installment.balance_due ?? installment.amount)}</span></div>)}</div></div> : null}
+              {detailSale.notes ? <div><p className="label">Observações</p><p className="text-sm text-ink/70">{detailSale.notes}</p></div> : null}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+
+      {adjustmentDraft && typeof document !== "undefined" ? createPortal(
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-6" role="presentation">
           <div
-            className="max-h-[92vh] w-full overflow-y-auto border border-line bg-surface shadow-2xl sm:max-w-lg sm:rounded-xl"
+            className="relative z-10 max-h-[92vh] w-full overflow-y-auto border border-line bg-white text-ink shadow-2xl sm:max-w-lg sm:rounded-xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="sale-adjustment-title"
@@ -605,7 +721,8 @@ export default function SalesPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
