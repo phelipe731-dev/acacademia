@@ -85,6 +85,26 @@ class SaleCancel(BaseModel):
     reason: str | None = None
 
 
+class SaleTermsUpdate(BaseModel):
+    payment_method: SalePaymentMethod
+    installments_count: int = Field(default=1, ge=1, le=24)
+    installment_payment_method: PaymentMethod | None = None
+    installment_due_dates: list[date] | None = None
+
+    @model_validator(mode="after")
+    def validate_installments(self) -> "SaleTermsUpdate":
+        if self.payment_method == SalePaymentMethod.PRAZO:
+            if self.installment_payment_method is None:
+                raise ValueError("Informe a forma combinada para as parcelas.")
+            if self.installment_due_dates is None or len(self.installment_due_dates) != self.installments_count:
+                raise ValueError("Informe um vencimento para cada parcela.")
+        else:
+            self.installments_count = 1
+            self.installment_payment_method = None
+            self.installment_due_dates = None
+        return self
+
+
 class SaleRead(BaseModel):
     id: int
     student_id: int | None

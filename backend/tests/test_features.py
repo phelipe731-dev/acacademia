@@ -119,6 +119,55 @@ def test_sale_installment_accepts_partial_receipts(client: TestClient) -> None:
     assert first.json()["balance_due"] == "80.00"
 
 
+def test_reception_can_correct_and_cancel_sale(client: TestClient) -> None:
+    admin_headers = create_admin_and_headers(client)
+    user = client.post(
+        "/users",
+        headers=admin_headers,
+        json={"name": "Recepcao", "email": "recepcao@example.com", "password": "recepcao123", "role": "RECEPCAO"},
+    )
+    assert user.status_code == 201, user.text
+    login = client.post("/auth/login", json={"email": "recepcao@example.com", "password": "recepcao123"})
+    assert login.status_code == 200, login.text
+    reception_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    student = create_student(client, admin_headers)
+    product = create_product(client, admin_headers, stock=2)
+    sale = client.post(
+        "/sales",
+        headers=admin_headers,
+        json={
+            "student_id": student["id"],
+            "payment_method": "PIX",
+            "items": [{"product_id": product["id"], "quantity": 1}],
+        },
+    )
+    assert sale.status_code == 201, sale.text
+    sale_id = sale.json()["id"]
+
+    corrected = client.patch(
+        f"/sales/{sale_id}/terms",
+        headers=reception_headers,
+        json={
+            "payment_method": "PRAZO",
+            "installments_count": 2,
+            "installment_payment_method": "PIX",
+            "installment_due_dates": ["2026-11-10", "2026-12-10"],
+        },
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["payment_method"] == "PRAZO"
+    assert len(corrected.json()["installments"]) == 2
+
+    canceled = client.patch(
+        f"/sales/{sale_id}/cancel",
+        headers=reception_headers,
+        json={"reason": "Correcao de lancamento"},
+    )
+    assert canceled.status_code == 200, canceled.text
+    assert canceled.json()["status"] == "CANCELADA"
+
+
 def test_duplicate_email_is_blocked(client: TestClient) -> None:
     headers = create_admin_and_headers(client)
     client.post("/students", headers=headers, json=_student_payload(name="Bia", email="bia@example.com"))

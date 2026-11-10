@@ -14,7 +14,7 @@ from app.models.sale import Sale, SaleInstallment, SaleItem, utcnow
 from app.models.stock import StockMovement
 from app.models.student import Student
 from app.models.user import User
-from app.schemas.sale import SaleCreate
+from app.schemas.sale import SaleCreate, SaleItemCreate, SaleTermsUpdate
 from app.services.audit import model_snapshot, record_audit
 
 
@@ -272,3 +272,57 @@ def cancel_sale_with_stock(db: Session, sale_id: int, current_user: User, reason
         .where(Sale.id == sale.id)
         .options(*sale_load_options())
     ).one()
+
+
+def adjust_sale_terms(db: Session, sale_id: int, payload: SaleTermsUpdate, current_user: User) -> Sale:
+    sale = db.scalars(
+        select(Sale)
+        .where(Sale.id == sale_id)
+        .options(*sale_load_options())
+        .with_for_update()
+    ).one_or_none()
+    if sale is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Venda nao encontrada.")
+    if sale.status == SaleStatus.CANCELADA:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Venda cancelada nao pode ser corrigida.")
+    if any(installment.receipts for installment in sale.installments):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Venda com recebimentos nao pode ter a forma alterada. Cancele e refaca a venda.",
+        )
+
+    before = model_snapshot(sale)
+    for installment in list(sale.installments):
+        db.delete(installment)
+    sale.installments.clear()
+    db.flush()
+
+    sale.payment_method = payload.payment_method
+    sale.installments_count = payload.installments_count
+    sale.installment_payment_method = payload.installment_payment_method
+    if payload.payment_method == SalePaymentMethod.PRAZO:
+        terms_payload = SaleCreate(
+            student_id=sale.student_id or 0,
+            payment_method=payload.payment_method,
+            installments_count=payload.installments_count,
+            installment_payment_method=payload.installment_payment_method,
+            first_due_date=payload.installment_due_dates[0],
+            installment_due_dates=payload.installment_due_dates,
+            notes=sale.notes,
+            items=[SaleItemCreate(product_id=item.product_id, quantity=item.quantity) for item in sale.items],
+        )
+        sale.installments.extend(create_sale_installments(db, sale, terms_payload))
+
+    db.flush()
+    record_audit(
+        db,
+        current_user,
+        entity_type="SALE",
+        entity_id=sale.id,
+        action="UPDATE",
+        summary=f"Forma de pagamento da venda #{sale.id} corrigida.",
+        before=before,
+        after=model_snapshot(sale),
+    )
+    db.commit()
+    return db.scalars(select(Sale).where(Sale.id == sale.id).options(*sale_load_options())).one()

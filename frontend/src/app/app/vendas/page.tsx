@@ -65,7 +65,7 @@ export default function SalesPage() {
   const [cancellingSaleId, setCancellingSaleId] = useState<number | null>(null);
   const [receivingInstallmentId, setReceivingInstallmentId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
-  const canCancelSales = getSession()?.user.role === "ADMIN";
+  const canManageSales = ["ADMIN", "RECEPCAO"].includes(getSession()?.user.role ?? "");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -138,6 +138,53 @@ export default function SalesPage() {
       await load();
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao cancelar venda."), type: "error" });
+    } finally {
+      setCancellingSaleId(null);
+    }
+  }
+
+  async function handleAdjustSale(sale: Sale) {
+    if (!canManageSales || cancellingSaleId !== null || sale.status === "CANCELADA") return;
+    const selectedMethod = window.prompt(
+      "Forma correta: DINHEIRO, PIX, CARTAO, OUTRO ou PRAZO",
+      sale.payment_method,
+    )?.trim().toUpperCase() as SalePaymentMethod | undefined;
+    if (!selectedMethod || !paymentMethods.includes(selectedMethod)) return;
+
+    const body: {
+      payment_method: SalePaymentMethod;
+      installments_count: number;
+      installment_payment_method: PaymentMethod | null;
+      installment_due_dates: string[] | null;
+    } = {
+      payment_method: selectedMethod,
+      installments_count: 1,
+      installment_payment_method: null,
+      installment_due_dates: null,
+    };
+    if (selectedMethod === "PRAZO") {
+      const count = Math.max(1, Math.min(24, Number(window.prompt("Quantidade de parcelas (1 a 24)", "1")) || 1));
+      const method = window.prompt("Forma das parcelas: PIX, DINHEIRO, CARTAO ou OUTRO", "PIX")?.trim().toUpperCase() as PaymentMethod | undefined;
+      if (!method || !installmentMethods.includes(method)) return;
+      const dates: string[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const date = window.prompt(`Vencimento da parcela ${index + 1}/${count} (AAAA-MM-DD)`, addMonthsInput(todayDateInput(), index));
+        if (!date) return;
+        dates.push(date);
+      }
+      body.installments_count = count;
+      body.installment_payment_method = method;
+      body.installment_due_dates = dates;
+    }
+
+    setCancellingSaleId(sale.id);
+    setMessage(null);
+    try {
+      await apiFetch<Sale>(`/sales/${sale.id}/terms`, { method: "PATCH", body: JSON.stringify(body) });
+      setMessage({ text: `Venda #${sale.id} corrigida. As parcelas foram atualizadas.`, type: "success" });
+      await load();
+    } catch (error) {
+      setMessage({ text: getErrorMessage(error, "Erro ao corrigir venda."), type: "error" });
     } finally {
       setCancellingSaleId(null);
     }
@@ -433,7 +480,17 @@ export default function SalesPage() {
                       ))}
                     </div>
                   ) : null}
-                  {canCancelSales && (sale.status ?? "CONCLUIDA") !== "CANCELADA" ? (
+                  {canManageSales && (sale.status ?? "CONCLUIDA") !== "CANCELADA" ? (
+                    <button
+                      className="btn-secondary mt-3 w-full justify-center"
+                      type="button"
+                      disabled={cancellingSaleId === sale.id}
+                      onClick={() => handleAdjustSale(sale)}
+                    >
+                      {cancellingSaleId === sale.id ? "Salvando..." : "Corrigir pagamento"}
+                    </button>
+                  ) : null}
+                  {canManageSales && (sale.status ?? "CONCLUIDA") !== "CANCELADA" ? (
                     <button
                       className="btn-secondary mt-3 w-full justify-center text-danger"
                       type="button"

@@ -11,12 +11,13 @@ from app.models.enums import PaymentMethod, SaleInstallmentStatus, SaleStatus, U
 from app.models.sale import Sale, SaleInstallment
 from app.models.user import User
 from app.schemas.payment import FinancialReceiptCreate
-from app.schemas.sale import SaleCancel, SaleCreate, SaleInstallmentPay, SaleInstallmentRead, SaleRead
+from app.schemas.sale import SaleCancel, SaleCreate, SaleInstallmentPay, SaleInstallmentRead, SaleRead, SaleTermsUpdate
 from app.services.audit import model_snapshot, record_audit
 from app.services.payments import update_student_status_from_payments
 from app.services.sales import (
     cancel_sale_with_stock,
     create_sale_with_stock,
+    adjust_sale_terms,
     normalize_sale_installment_status,
     refresh_overdue_sale_installments,
     sale_load_options,
@@ -181,7 +182,17 @@ def receive_sale_installment(
 def cancel_sale(
     sale_id: int,
     payload: SaleCancel,
-    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
     db: Session = Depends(get_db),
 ) -> Sale:
     return cancel_sale_with_stock(db, sale_id, current_user, payload.reason)
+
+
+@router.patch("/{sale_id}/terms", response_model=SaleRead)
+def update_sale_terms(
+    sale_id: int,
+    payload: SaleTermsUpdate,
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.RECEPCAO)),
+    db: Session = Depends(get_db),
+) -> Sale:
+    return adjust_sale_terms(db, sale_id, payload, current_user)
