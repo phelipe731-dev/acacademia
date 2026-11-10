@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Receipt, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { Plus, Receipt, ShoppingCart, Trash2, X, XCircle } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Message } from "@/components/Message";
@@ -13,6 +13,14 @@ interface DraftItem {
   key: string;
   product_id: string;
   quantity: string;
+}
+
+interface SaleAdjustmentDraft {
+  sale: Sale;
+  paymentMethod: SalePaymentMethod;
+  installmentsCount: string;
+  installmentPaymentMethod: PaymentMethod;
+  installmentDueDates: string[];
 }
 
 // O item inicial usa chave fixa para o HTML do servidor e do cliente coincidirem
@@ -63,6 +71,7 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [cancellingSaleId, setCancellingSaleId] = useState<number | null>(null);
+  const [adjustmentDraft, setAdjustmentDraft] = useState<SaleAdjustmentDraft | null>(null);
   const [receivingInstallmentId, setReceivingInstallmentId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
   const canManageSales = ["ADMIN", "RECEPCAO"].includes(getSession()?.user.role ?? "");
@@ -143,45 +152,46 @@ export default function SalesPage() {
     }
   }
 
-  async function handleAdjustSale(sale: Sale) {
-    if (!canManageSales || cancellingSaleId !== null || sale.status === "CANCELADA") return;
-    const selectedMethod = window.prompt(
-      "Forma correta: DINHEIRO, PIX, CARTAO, OUTRO ou PRAZO",
-      sale.payment_method,
-    )?.trim().toUpperCase() as SalePaymentMethod | undefined;
-    if (!selectedMethod || !paymentMethods.includes(selectedMethod)) return;
+  function openAdjustmentModal(sale: Sale) {
+    const count = sale.payment_method === "PRAZO" ? sale.installments_count : 1;
+    const existingDates = sale.installments?.map((installment) => installment.due_date) ?? [];
+    const firstDate = existingDates[0] || todayDateInput();
+    setAdjustmentDraft({
+      sale,
+      paymentMethod: sale.payment_method,
+      installmentsCount: String(count),
+      installmentPaymentMethod: sale.installment_payment_method || "PIX",
+      installmentDueDates: Array.from({ length: count }, (_, index) => existingDates[index] || addMonthsInput(firstDate, index)),
+    });
+  }
 
-    const body: {
-      payment_method: SalePaymentMethod;
-      installments_count: number;
-      installment_payment_method: PaymentMethod | null;
-      installment_due_dates: string[] | null;
-    } = {
-      payment_method: selectedMethod,
-      installments_count: 1,
-      installment_payment_method: null,
-      installment_due_dates: null,
+  function updateAdjustmentCount(value: string) {
+    if (!adjustmentDraft) return;
+    const count = Math.max(1, Math.min(24, Number(value) || 1));
+    const firstDate = adjustmentDraft.installmentDueDates[0] || todayDateInput();
+    setAdjustmentDraft({
+      ...adjustmentDraft,
+      installmentsCount: String(count),
+      installmentDueDates: Array.from({ length: count }, (_, index) => adjustmentDraft.installmentDueDates[index] || addMonthsInput(firstDate, index)),
+    });
+  }
+
+  async function handleAdjustmentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!adjustmentDraft || cancellingSaleId !== null) return;
+    const body = {
+      payment_method: adjustmentDraft.paymentMethod,
+      installments_count: adjustmentDraft.paymentMethod === "PRAZO" ? Number(adjustmentDraft.installmentsCount) : 1,
+      installment_payment_method: adjustmentDraft.paymentMethod === "PRAZO" ? adjustmentDraft.installmentPaymentMethod : null,
+      installment_due_dates: adjustmentDraft.paymentMethod === "PRAZO" ? adjustmentDraft.installmentDueDates : null,
     };
-    if (selectedMethod === "PRAZO") {
-      const count = Math.max(1, Math.min(24, Number(window.prompt("Quantidade de parcelas (1 a 24)", "1")) || 1));
-      const method = window.prompt("Forma das parcelas: PIX, DINHEIRO, CARTAO ou OUTRO", "PIX")?.trim().toUpperCase() as PaymentMethod | undefined;
-      if (!method || !installmentMethods.includes(method)) return;
-      const dates: string[] = [];
-      for (let index = 0; index < count; index += 1) {
-        const date = window.prompt(`Vencimento da parcela ${index + 1}/${count} (AAAA-MM-DD)`, addMonthsInput(todayDateInput(), index));
-        if (!date) return;
-        dates.push(date);
-      }
-      body.installments_count = count;
-      body.installment_payment_method = method;
-      body.installment_due_dates = dates;
-    }
 
-    setCancellingSaleId(sale.id);
+    setCancellingSaleId(adjustmentDraft.sale.id);
     setMessage(null);
     try {
-      await apiFetch<Sale>(`/sales/${sale.id}/terms`, { method: "PATCH", body: JSON.stringify(body) });
-      setMessage({ text: `Venda #${sale.id} corrigida. As parcelas foram atualizadas.`, type: "success" });
+      await apiFetch<Sale>(`/sales/${adjustmentDraft.sale.id}/terms`, { method: "PATCH", body: JSON.stringify(body) });
+      setMessage({ text: `Venda #${adjustmentDraft.sale.id} corrigida. As parcelas foram atualizadas.`, type: "success" });
+      setAdjustmentDraft(null);
       await load();
     } catch (error) {
       setMessage({ text: getErrorMessage(error, "Erro ao corrigir venda."), type: "error" });
@@ -263,7 +273,7 @@ export default function SalesPage() {
 
       {message ? <Message message={message.text} type={message.type} /> : null}
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
+      <section className="grid items-start gap-4 xl:grid-cols-[1fr_380px]">
         <form onSubmit={handleSale} className="panel space-y-4 p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="panel-title">Nova venda</h2>
@@ -485,7 +495,7 @@ export default function SalesPage() {
                       className="btn-secondary mt-3 w-full justify-center"
                       type="button"
                       disabled={cancellingSaleId === sale.id}
-                      onClick={() => handleAdjustSale(sale)}
+                      onClick={() => openAdjustmentModal(sale)}
                     >
                       {cancellingSaleId === sale.id ? "Salvando..." : "Corrigir pagamento"}
                     </button>
@@ -507,6 +517,96 @@ export default function SalesPage() {
           </div>
         </aside>
       </section>
+
+      {adjustmentDraft ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-6" role="presentation">
+          <div
+            className="max-h-[92vh] w-full overflow-y-auto border border-line bg-surface shadow-2xl sm:max-w-lg sm:rounded-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sale-adjustment-title"
+          >
+            <div className="flex items-center justify-between border-b border-line px-5 py-4">
+              <div>
+                <h2 id="sale-adjustment-title" className="text-lg font-bold text-ink">Corrigir venda #{adjustmentDraft.sale.id}</h2>
+                <p className="mt-1 text-sm text-ink/60">Atualize a forma de pagamento e as parcelas.</p>
+              </div>
+              <button className="btn-secondary h-10 w-10 px-0" type="button" aria-label="Fechar" title="Fechar" onClick={() => setAdjustmentDraft(null)}>
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+            <form className="space-y-4 p-5" onSubmit={handleAdjustmentSubmit}>
+              <div>
+                <label className="label" htmlFor="adjustment-payment-method">Forma de pagamento</label>
+                <select
+                  id="adjustment-payment-method"
+                  className="field"
+                  value={adjustmentDraft.paymentMethod}
+                  onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, paymentMethod: event.target.value as SalePaymentMethod })}
+                >
+                  {paymentMethods.map((method) => <option key={method} value={method}>{method}</option>)}
+                </select>
+              </div>
+
+              {adjustmentDraft.paymentMethod === "PRAZO" ? (
+                <div className="space-y-4 rounded-lg border border-line bg-paper/70 p-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="label" htmlFor="adjustment-installments">Parcelas</label>
+                      <input
+                        id="adjustment-installments"
+                        className="field"
+                        type="number"
+                        min="1"
+                        max="24"
+                        required
+                        value={adjustmentDraft.installmentsCount}
+                        onChange={(event) => updateAdjustmentCount(event.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="adjustment-installment-method">Forma das parcelas</label>
+                      <select
+                        id="adjustment-installment-method"
+                        className="field"
+                        value={adjustmentDraft.installmentPaymentMethod}
+                        onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, installmentPaymentMethod: event.target.value as PaymentMethod })}
+                      >
+                        {installmentMethods.map((method) => <option key={method} value={method}>{method}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {adjustmentDraft.installmentDueDates.map((dueDate, index) => (
+                      <div key={`adjustment-due-${index}`}>
+                        <label className="label" htmlFor={`adjustment-due-${index}`}>Vencimento {index + 1}</label>
+                        <input
+                          id={`adjustment-due-${index}`}
+                          className="field"
+                          type="date"
+                          required
+                          value={dueDate}
+                          onChange={(event) => setAdjustmentDraft({
+                            ...adjustmentDraft,
+                            installmentDueDates: adjustmentDraft.installmentDueDates.map((current, currentIndex) => currentIndex === index ? event.target.value : current),
+                          })}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button className="btn-secondary w-full sm:w-auto" type="button" onClick={() => setAdjustmentDraft(null)}>Cancelar</button>
+                <button className="btn-primary w-full sm:w-auto" type="submit" disabled={cancellingSaleId === adjustmentDraft.sale.id}>
+                  {cancellingSaleId === adjustmentDraft.sale.id ? "Salvando..." : "Salvar correção"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
